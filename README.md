@@ -19,7 +19,7 @@ Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 
 | Platform | Backend | Notes |
 | --- | --- | --- |
-| Android | FFI + `libkiwi.so` | `arm64-v8a` and `x86_64` are included in this repo. Build additional ABIs if needed. |
+| Android | FFI + `libkiwi.so` | If missing, plugin auto-builds `libkiwi.so` from Kiwi source during Android `preBuild` (`flutter run`/`flutter build`). |
 | iOS | FFI + `Kiwi.xcframework` | Not bundled by default. Add `ios/Frameworks/Kiwi.xcframework` manually. |
 | macOS | FFI + `libkiwi.dylib` | Looks up `macos/Frameworks/libkiwi.dylib` and framework/dylib candidates. |
 | Linux | FFI + `libkiwi.so` | Uses `linux/prebuilt/libkiwi.so` when present. |
@@ -158,6 +158,14 @@ Output location:
 
 - `android/src/main/jniLibs/<abi>/libkiwi.so`
 
+Notes:
+
+- The script skips ABI outputs that already exist by default.
+- Use `--rebuild` to force recompilation.
+- Android plugin build also invokes this automatically via `android/build.gradle` (`preBuild` dependency).
+- To disable auto-build for one run, pass:
+  - `-Pflutter.kiwi.skipAndroidLibBuild=true`
+
 ## API Summary
 
 ```dart
@@ -188,6 +196,10 @@ class KiwiAnalyzer {
 - `Failed to load Kiwi dynamic library`
   - Verify native library exists for your platform.
   - Optionally set `FLUTTER_KIWI_FFI_LIBRARY_PATH`.
+- Android auto-build fails (`cmake`/`git`/NDK not found)
+  - Ensure Android NDK is installed (`ANDROID_NDK_HOME` or `ANDROID_NDK_ROOT`).
+  - Ensure `cmake` and `git` are available on PATH.
+  - If needed, temporarily skip auto-build with `-Pflutter.kiwi.skipAndroidLibBuild=true`.
 - `Model path is required` or model-not-found errors
   - Pass `modelPath`/`assetModelPath`, or set `FLUTTER_KIWI_FFI_MODEL_PATH`.
   - On web, prefer same-origin asset hosting and set `FLUTTER_KIWI_FFI_WEB_MODEL_BASE_URL`.

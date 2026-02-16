@@ -24,6 +24,49 @@ rootProject.allprojects {
 
 apply plugin: "com.android.library"
 
+def kiwiAbis = ["arm64-v8a", "x86_64"]
+def kiwiOutputFiles = kiwiAbis.collect { abi ->
+    file("src/main/jniLibs/${abi}/libkiwi.so")
+}
+def kiwiBuildScript = file("${rootProject.projectDir}/../tool/build_android_libkiwi.sh")
+def kiwiSkipAutoBuild =
+        (project.findProperty("flutter.kiwi.skipAndroidLibBuild")?.toString() ?: "false").toBoolean()
+
+tasks.register("prepareKiwiAndroidLibs", Exec) {
+    group = "build setup"
+    description = "Build kiwi C API shared libraries for Android plugin ABIs."
+
+    inputs.file(kiwiBuildScript)
+    outputs.files(kiwiOutputFiles)
+
+    onlyIf {
+        if (kiwiSkipAutoBuild) {
+            logger.lifecycle("[kiwi] Skip auto-build (-Pflutter.kiwi.skipAndroidLibBuild=true).")
+            return false
+        }
+        if (!kiwiBuildScript.exists()) {
+            throw new GradleException("Kiwi build script not found: ${kiwiBuildScript}")
+        }
+        final boolean alreadyPrepared = kiwiOutputFiles.every {
+            it.exists() && it.length() > 0L
+        }
+        if (alreadyPrepared) {
+            logger.lifecycle("[kiwi] Reusing existing Android Kiwi libraries.")
+            return false
+        }
+        return true
+    }
+
+    commandLine(
+            "bash",
+            kiwiBuildScript.absolutePath,
+            "--abis",
+            kiwiAbis.join(","),
+            "--jobs",
+            Runtime.getRuntime().availableProcessors().toString(),
+    )
+}
+
 android {
     namespace = "com.example.flutter_kiwi_ffi"
 
@@ -63,4 +106,8 @@ android {
             abiFilters "arm64-v8a", "x86_64"
         }
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(tasks.named("prepareKiwiAndroidLibs"))
 }

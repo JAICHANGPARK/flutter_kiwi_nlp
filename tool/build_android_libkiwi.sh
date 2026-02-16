@@ -7,6 +7,7 @@ BUILD_ROOT="${ROOT_DIR}/.tmp/kiwi-android-build"
 ABIS="arm64-v8a,x86_64"
 ANDROID_PLATFORM=21
 JOBS="${JOBS:-8}"
+SKIP_EXISTING=1
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ Options:
   --abis <csv>               ABI list (default: arm64-v8a,x86_64)
   --android-platform <num>   Android API level (default: 21)
   --jobs <n>                 Parallel build jobs (default: 8)
+  --rebuild                  Rebuild even when output lib already exists
   -h, --help                 Show this help
 EOF
 }
@@ -38,6 +40,10 @@ while [[ $# -gt 0 ]]; do
     --jobs)
       JOBS="${2:-}"
       shift 2
+      ;;
+    --rebuild)
+      SKIP_EXISTING=0
+      shift
       ;;
     -h|--help)
       usage
@@ -128,6 +134,11 @@ for ABI in "${ABI_LIST[@]}"; do
   BUILD_DIR="${BUILD_ROOT}/${ABI}"
   OUT_LIB_DIR="${ROOT_DIR}/android/src/main/jniLibs/${ABI}"
   OUT_LIB="${OUT_LIB_DIR}/libkiwi.so"
+
+  if [[ "$SKIP_EXISTING" -eq 1 && -s "$OUT_LIB" ]]; then
+    echo "[android] Skip ABI=${ABI} (existing output found: $OUT_LIB)"
+    continue
+  fi
 
   echo "[android] Configure ABI=${ABI}"
   cmake -S "$KIWI_SRC" -B "$BUILD_DIR" \
