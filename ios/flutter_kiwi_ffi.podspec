@@ -2,6 +2,8 @@
 # To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
 # Run `pod lib lint flutter_kiwi_ffi.podspec` to validate before publishing.
 #
+require 'shellwords'
+
 Pod::Spec.new do |s|
   s.name             = 'flutter_kiwi_ffi'
   s.version          = '0.0.1'
@@ -19,10 +21,9 @@ A new Flutter FFI plugin project.
   # `../src/*` so that the C sources can be shared among all target platforms.
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
-  kiwi_xcframework = File.join(__dir__, 'Frameworks', 'Kiwi.xcframework')
-  if File.directory?(kiwi_xcframework)
-    s.vendored_frameworks = 'Frameworks/Kiwi.xcframework'
-  end
+  prepare_script = Shellwords.escape(File.expand_path('../tool/build_ios_kiwi_xcframework.sh', __dir__))
+  s.prepare_command = "bash #{prepare_script}"
+  s.vendored_frameworks = 'Frameworks/Kiwi.xcframework'
   s.dependency 'Flutter'
   s.platform = :ios, '13.0'
 

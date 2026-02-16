@@ -12,7 +12,7 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 | 플랫폼 | 상태 | 비고 |
 | --- | --- | --- |
 | Android | 지원 | `libkiwi.so`가 없으면 Android `preBuild` 단계에서 자동 빌드합니다. |
-| iOS | 지원(수동 설정 필요) | `ios/Frameworks/Kiwi.xcframework`를 직접 추가해야 합니다. |
+| iOS | 지원 | `Kiwi.xcframework`가 없으면 `pod install` 단계에서 자동 생성합니다. |
 | macOS | 지원 | `macos/Frameworks/libkiwi.dylib` 또는 프레임워크 후보 경로를 사용합니다. |
 | Linux | 지원 | `linux/prebuilt/libkiwi.so`를 사용합니다. |
 | Windows | 지원 | `windows/prebuilt/kiwi.dll`을 사용합니다. |
@@ -101,6 +101,17 @@ Future<void> runDemo() async {
 - 한 번만 자동 빌드 비활성화:
   - `-Pflutter.kiwi.skipAndroidLibBuild=true`
 
+## iOS 자동 준비
+
+플러그인은 `ios/flutter_kiwi_ffi.podspec`의 `prepare_command`에서 `tool/build_ios_kiwi_xcframework.sh`를 호출합니다.
+
+- `ios/Frameworks/Kiwi.xcframework`가 없으면 `pod install` 단계에서 자동 생성
+- 필요 도구: macOS, Xcode(및 Command Line Tools), `cmake`, `git`
+- 한 번만 자동 빌드 비활성화:
+  - `FLUTTER_KIWI_SKIP_IOS_FRAMEWORK_BUILD=true flutter run -d ios`
+- 강제 재빌드:
+  - `FLUTTER_KIWI_IOS_REBUILD=true flutter run -d ios`
+
 ## 자주 발생하는 문제
 
 - `Failed to load Kiwi dynamic library`
@@ -108,6 +119,10 @@ Future<void> runDemo() async {
   - 필요 시 `FLUTTER_KIWI_FFI_LIBRARY_PATH` 지정
 - Android 자동 빌드 실패 (`cmake`/`git`/NDK 누락)
   - `ANDROID_NDK_HOME` 또는 `ANDROID_NDK_ROOT` 설정
+  - `cmake`, `git` PATH 확인
+- iOS 자동 빌드 실패 (`xcodebuild`/`cmake`/`git` 누락)
+  - Xcode 실행 후 라이선스/초기 구성 완료
+  - `xcode-select --install` 확인
   - `cmake`, `git` PATH 확인
 - 모델 경로 관련 오류
   - `modelPath`/`assetModelPath` 전달 또는 `FLUTTER_KIWI_FFI_MODEL_PATH` 설정

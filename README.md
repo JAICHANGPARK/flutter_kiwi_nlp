@@ -12,7 +12,7 @@ Korean morphological analysis plugin for Flutter powered by Kiwi.
 | Platform | Status |
 | --- | --- |
 | Android | Supported |
-| iOS | Supported (manual framework setup required) |
+| iOS | Supported (auto-build on first iOS build) |
 | macOS | Supported |
 | Linux | Supported |
 | Windows | Supported |

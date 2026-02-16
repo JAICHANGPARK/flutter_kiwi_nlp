@@ -12,7 +12,7 @@ Until rename is completed, use `flutter_kiwi_ffi` in dependency and import state
 | Platform | Status | Notes |
 | --- | --- | --- |
 | Android | Supported | Builds `libkiwi.so` automatically during Android `preBuild` if missing. |
-| iOS | Supported (manual setup) | Add `ios/Frameworks/Kiwi.xcframework` manually. |
+| iOS | Supported | Generates `Kiwi.xcframework` automatically during `pod install` when missing. |
 | macOS | Supported | Uses `macos/Frameworks/libkiwi.dylib` or framework candidates. |
 | Linux | Supported | Uses `linux/prebuilt/libkiwi.so` when present. |
 | Windows | Supported | Uses `windows/prebuilt/kiwi.dll` when present. |
@@ -101,6 +101,17 @@ The plugin runs `tool/build_android_libkiwi.sh` from `android/build.gradle` (`pr
 - Skip automatic build for one run with:
   - `-Pflutter.kiwi.skipAndroidLibBuild=true`
 
+## iOS Auto Prepare
+
+The plugin runs `tool/build_ios_kiwi_xcframework.sh` from `ios/flutter_kiwi_ffi.podspec` (`prepare_command`).
+
+- If `ios/Frameworks/Kiwi.xcframework` is missing, it is generated during `pod install`.
+- Required tools: macOS, Xcode (Command Line Tools), `cmake`, `git`.
+- Skip automatic build for one run with:
+  - `FLUTTER_KIWI_SKIP_IOS_FRAMEWORK_BUILD=true flutter run -d ios`
+- Force rebuild with:
+  - `FLUTTER_KIWI_IOS_REBUILD=true flutter run -d ios`
+
 ## Common Issues
 
 - `Failed to load Kiwi dynamic library`
@@ -108,6 +119,10 @@ The plugin runs `tool/build_android_libkiwi.sh` from `android/build.gradle` (`pr
   - Optionally set `FLUTTER_KIWI_FFI_LIBRARY_PATH`.
 - Android auto-build fails (`cmake`/`git`/NDK not found)
   - Set `ANDROID_NDK_HOME` or `ANDROID_NDK_ROOT`.
+  - Ensure `cmake` and `git` are on PATH.
+- iOS auto-build fails (`xcodebuild`/`cmake`/`git` not found)
+  - Open Xcode once to finish first-time setup and license acceptance.
+  - Check `xcode-select --install`.
   - Ensure `cmake` and `git` are on PATH.
 - Model not found
   - Pass `modelPath` or `assetModelPath`.

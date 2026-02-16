@@ -4,6 +4,7 @@
 *.log
 *.pyc
 *.swp
+.DS_Store
 .buildlog/
 .history
 
@@ -124,3 +125,4 @@ app.*.symbols
 .idea/
 android/src/main/jniLibs/*/libkiwi.so
 !android/src/main/jniLibs/*/.gitkeep
+ios/Frameworks/Kiwi.xcframework/
