@@ -28,7 +28,7 @@ def kiwiAbis = ["arm64-v8a", "x86_64"]
 def kiwiOutputFiles = kiwiAbis.collect { abi ->
     file("src/main/jniLibs/${abi}/libkiwi.so")
 }
-def kiwiBuildScript = file("${rootProject.projectDir}/../tool/build_android_libkiwi.sh")
+def kiwiBuildScript = file("${projectDir}/../tool/build_android_libkiwi.sh")
 def kiwiSkipAutoBuild =
         (project.findProperty("flutter.kiwi.skipAndroidLibBuild")?.toString() ?: "false").toBoolean()
 
@@ -45,7 +45,8 @@ tasks.register("prepareKiwiAndroidLibs", Exec) {
             return false
         }
         if (!kiwiBuildScript.exists()) {
-            throw new GradleException("Kiwi build script not found: ${kiwiBuildScript}")
+            logger.lifecycle("[kiwi] Skip auto-build (script not found: ${kiwiBuildScript}).")
+            return false
         }
         final boolean alreadyPrepared = kiwiOutputFiles.every {
             it.exists() && it.length() > 0L

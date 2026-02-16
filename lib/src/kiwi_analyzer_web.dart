@@ -646,7 +646,7 @@ Map<String, Uint8List> _extractModelFilesFromArchive(Uint8List archiveBytes) {
     if (!_modelFileNames.contains(baseName)) {
       continue;
     }
-    final Object? content = entry.content;
+    final Object content = entry.content;
     if (content is Uint8List) {
       files[baseName] = content;
     } else if (content is List<int>) {

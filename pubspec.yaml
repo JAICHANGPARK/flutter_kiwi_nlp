@@ -1,7 +1,16 @@
 name: flutter_kiwi_ffi
-description: "Native-first Flutter FFI plugin scaffold for Kiwi morphological analysis."
+description: "Flutter plugin for Korean morphological analysis with Kiwi via native FFI and web WASM."
 version: 0.0.1
-homepage:
+homepage: https://github.com/JAICHANGPARK/flutter_kiwi_nlp
+repository: https://github.com/JAICHANGPARK/flutter_kiwi_nlp
+issue_tracker: https://github.com/JAICHANGPARK/flutter_kiwi_nlp/issues
+documentation: https://github.com/JAICHANGPARK/flutter_kiwi_nlp#readme
+topics:
+  - korean-nlp
+  - morphological-analysis
+  - ffi
+  - wasm
+  - flutter-plugin
 
 environment:
   sdk: ^3.11.0
@@ -12,10 +21,10 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
-  archive: ^3.6.1
+  archive: ^4.0.7
   crypto: ^3.0.7
-  ffi: ^2.1.3
-  http: ^1.5.0
+  ffi: ^2.2.0
+  http: ^1.6.0
 
 dev_dependencies:
   ffigen: ^20.1.1
