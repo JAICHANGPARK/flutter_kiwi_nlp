@@ -1,0 +1,480 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:ffi';
+import 'dart:isolate';
+import 'dart:io';
+
+import 'package:archive/archive_io.dart';
+import 'package:crypto/crypto.dart';
+import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+import '../flutter_kiwi_ffi_bindings_generated.dart';
+import 'kiwi_exception.dart';
+import 'kiwi_options.dart';
+import 'kiwi_types.dart';
+
+const String _libName = 'flutter_kiwi_ffi';
+
+final DynamicLibrary _dylib = () {
+  if (Platform.isMacOS || Platform.isIOS) {
+    return DynamicLibrary.open('$_libName.framework/$_libName');
+  }
+  if (Platform.isAndroid || Platform.isLinux) {
+    return DynamicLibrary.open('lib$_libName.so');
+  }
+  if (Platform.isWindows) {
+    return DynamicLibrary.open('$_libName.dll');
+  }
+  throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+}();
+
+final FlutterKiwiFfiBindings _bindings = FlutterKiwiFfiBindings(_dylib);
+
+const String _defaultAssetModelPath = String.fromEnvironment(
+  'FLUTTER_KIWI_FFI_ASSET_MODEL_PATH',
+  defaultValue: '',
+);
+const String _defaultModelArchiveUrl = String.fromEnvironment(
+  'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_URL',
+  defaultValue:
+      'https://github.com/bab2min/Kiwi/releases/download/v0.22.2/kiwi_model_v0.22.2_base.tgz',
+);
+const String _defaultModelCacheKey = String.fromEnvironment(
+  'FLUTTER_KIWI_FFI_MODEL_CACHE_KEY',
+  defaultValue: 'v0.22.2_base',
+);
+const String _defaultModelArchiveSha256 = String.fromEnvironment(
+  'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_SHA256',
+  defaultValue:
+      'aa11a6e5b06c7db43e9b07148620f5fb7838a30172dacb40f75202333110f2d1',
+);
+const List<String> _autoAssetModelPaths = <String>[
+  'assets/kiwi-models/cong/base',
+  'packages/flutter_kiwi_ffi_models/assets/kiwi-models/cong/base',
+  'packages/flutter_kiwi_ffi/assets/kiwi-models/cong/base',
+];
+
+const List<String> _modelFileNames = <String>[
+  'combiningRule.txt',
+  'cong.mdl',
+  'default.dict',
+  'dialect.dict',
+  'extract.mdl',
+  'multi.dict',
+  'sj.morph',
+  'typo.dict',
+];
+const Map<String, int> _minModelFileBytes = <String, int>{
+  'combiningRule.txt': 128,
+  'cong.mdl': 10 * 1024 * 1024,
+  'default.dict': 512 * 1024,
+  'dialect.dict': 64,
+  'extract.mdl': 4 * 1024,
+  'multi.dict': 1024 * 1024,
+  'sj.morph': 1024 * 1024,
+  'typo.dict': 64,
+};
+
+Future<String>? _downloadedModelPathFuture;
+
+class KiwiAnalyzer {
+  final Pointer<flutter_kiwi_ffi_handle> _handle;
+  bool _closed = false;
+
+  KiwiAnalyzer._(this._handle);
+
+  static Future<KiwiAnalyzer> create({
+    String? modelPath,
+    String? assetModelPath,
+    int numThreads = -1,
+    int buildOptions = KiwiBuildOption.defaultOption,
+    int matchOptions = KiwiMatchOption.allWithNormalizing,
+  }) async {
+    final String? resolvedModelPath = await _resolveModelPath(
+      modelPath: modelPath,
+      assetModelPath: assetModelPath,
+    );
+    if (resolvedModelPath == null || resolvedModelPath.isEmpty) {
+      throw KiwiException(
+        'Kiwi model not found. '
+        'Pass modelPath/assetModelPath, set FLUTTER_KIWI_FFI_MODEL_PATH, '
+        'or allow default model download.',
+      );
+    }
+    final Pointer<Utf8> modelPathPtr = resolvedModelPath.toNativeUtf8(
+      allocator: malloc,
+    );
+    int resolvedBuildOptions = buildOptions;
+    if ((resolvedBuildOptions & 0x0F00) == 0) {
+      resolvedBuildOptions |= KiwiBuildOption.modelTypeCong;
+    }
+    try {
+      final Pointer<flutter_kiwi_ffi_handle> handle = _bindings
+          .flutter_kiwi_ffi_init(
+            modelPathPtr.cast(),
+            numThreads,
+            resolvedBuildOptions,
+            matchOptions,
+          );
+      if (handle == nullptr) {
+        throw KiwiException(_readLastError());
+      }
+      return KiwiAnalyzer._(handle);
+    } finally {
+      malloc.free(modelPathPtr);
+    }
+  }
+
+  String get nativeVersion {
+    final Pointer<Char> ptr = _bindings.flutter_kiwi_ffi_version();
+    if (ptr == nullptr) {
+      return 'unknown';
+    }
+    return ptr.cast<Utf8>().toDartString();
+  }
+
+  Future<KiwiAnalyzeResult> analyze(
+    String text, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _assertOpen();
+    final Pointer<Utf8> textPtr = text.toNativeUtf8(allocator: malloc);
+    try {
+      final Pointer<Char> raw = _bindings.flutter_kiwi_ffi_analyze_json(
+        _handle,
+        textPtr.cast(),
+        options.topN,
+        options.matchOptions,
+      );
+      if (raw == nullptr) {
+        throw KiwiException(_readLastError());
+      }
+      try {
+        final String jsonText = raw.cast<Utf8>().toDartString();
+        final dynamic decoded = jsonDecode(jsonText);
+        if (decoded is! Map<String, dynamic>) {
+          throw const KiwiException('Unexpected analyze payload.');
+        }
+        return KiwiAnalyzeResult.fromJson(decoded);
+      } finally {
+        _bindings.flutter_kiwi_ffi_free_string(raw);
+      }
+    } finally {
+      malloc.free(textPtr);
+    }
+  }
+
+  Future<void> addUserWord(
+    String word, {
+    String tag = 'NNP',
+    double score = 0.0,
+  }) async {
+    _assertOpen();
+    final Pointer<Utf8> wordPtr = word.toNativeUtf8(allocator: malloc);
+    final Pointer<Utf8> tagPtr = tag.toNativeUtf8(allocator: malloc);
+    try {
+      final int status = _bindings.flutter_kiwi_ffi_add_user_word(
+        _handle,
+        wordPtr.cast(),
+        tagPtr.cast(),
+        score,
+      );
+      if (status != 0) {
+        throw KiwiException(_readLastError());
+      }
+    } finally {
+      malloc.free(wordPtr);
+      malloc.free(tagPtr);
+    }
+  }
+
+  Future<void> close() async {
+    if (_closed) return;
+    final int status = _bindings.flutter_kiwi_ffi_close(_handle);
+    _closed = true;
+    if (status != 0) {
+      throw KiwiException(_readLastError());
+    }
+  }
+
+  void _assertOpen() {
+    if (_closed) {
+      throw const KiwiException(
+        'KiwiAnalyzer is already closed. Create a new instance.',
+      );
+    }
+  }
+
+  static String _readLastError() {
+    final Pointer<Char> errorPtr = _bindings.flutter_kiwi_ffi_last_error();
+    if (errorPtr == nullptr) {
+      return 'Unknown kiwi native error.';
+    }
+    return errorPtr.cast<Utf8>().toDartString();
+  }
+
+  static Future<String?> _resolveModelPath({
+    String? modelPath,
+    String? assetModelPath,
+  }) async {
+    final String path = (modelPath ?? '').trim();
+    if (path.isNotEmpty) {
+      return path;
+    }
+
+    final String assetBase = (assetModelPath ?? '').trim();
+    if (assetBase.isNotEmpty) {
+      return _extractModelAssets(assetBase);
+    }
+
+    final String envModelPath =
+        (Platform.environment['FLUTTER_KIWI_FFI_MODEL_PATH'] ?? '').trim();
+    if (envModelPath.isNotEmpty) {
+      return envModelPath;
+    }
+
+    final String definedAssetBase = _defaultAssetModelPath.trim();
+    if (definedAssetBase.isNotEmpty) {
+      return _extractModelAssets(definedAssetBase);
+    }
+
+    for (final String candidate in _autoAssetModelPaths) {
+      if (await _assetModelExists(candidate)) {
+        return _extractModelAssets(candidate);
+      }
+    }
+
+    return _ensureDownloadedModel();
+  }
+
+  static Future<bool> _assetModelExists(String assetBase) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    final String normalized = assetBase.endsWith('/')
+        ? assetBase.substring(0, assetBase.length - 1)
+        : assetBase;
+    try {
+      await rootBundle.load('$normalized/cong.mdl');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String> _extractModelAssets(String assetBase) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    final String normalized = assetBase.endsWith('/')
+        ? assetBase.substring(0, assetBase.length - 1)
+        : assetBase;
+    final String cacheKey = base64Url
+        .encode(utf8.encode(normalized))
+        .replaceAll('=', '');
+    final Directory outputDir = Directory(
+      '${Directory.systemTemp.path}/flutter_kiwi_ffi_model/$cacheKey',
+    );
+    await outputDir.create(recursive: true);
+
+    try {
+      for (final String fileName in _modelFileNames) {
+        final File outputFile = File('${outputDir.path}/$fileName');
+        if (outputFile.existsSync() && outputFile.lengthSync() > 0) {
+          continue;
+        }
+        final ByteData asset = await rootBundle.load('$normalized/$fileName');
+        await outputFile.writeAsBytes(
+          asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
+          flush: true,
+        );
+      }
+    } catch (error) {
+      throw KiwiException(
+        'Failed to load Kiwi model assets from "$normalized". '
+        'Declare assets and include required files (${_modelFileNames.join(', ')}). '
+        'Original error: $error',
+      );
+    }
+
+    return outputDir.path;
+  }
+
+  static Future<String> _ensureDownloadedModel() {
+    final Future<String>? cached = _downloadedModelPathFuture;
+    if (cached != null) {
+      return cached;
+    }
+    final Future<String> next = _downloadDefaultModelIfNeeded();
+    _downloadedModelPathFuture = next;
+    return next.whenComplete(() {
+      if (identical(_downloadedModelPathFuture, next)) {
+        _downloadedModelPathFuture = null;
+      }
+    });
+  }
+
+  static Future<String> _downloadDefaultModelIfNeeded() {
+    return _downloadDefaultModelIfNeededImpl().timeout(
+      const Duration(minutes: 3),
+      onTimeout: () {
+        throw const KiwiException(
+          'Timed out while preparing default Kiwi model (3 minutes).',
+        );
+      },
+    );
+  }
+
+  static Future<String> _downloadDefaultModelIfNeededImpl() async {
+    final String cacheRootPath =
+        '${Directory.systemTemp.path}/flutter_kiwi_ffi_model_cache/$_defaultModelCacheKey';
+    final Directory cacheRoot = Directory(cacheRootPath);
+    final Directory modelDir = Directory('$cacheRootPath/models/cong/base');
+    if (_hasModelFiles(modelDir.path)) {
+      return modelDir.path;
+    }
+
+    await cacheRoot.create(recursive: true);
+    final File archiveFile = File('$cacheRootPath/model.tgz');
+    await _ensureArchiveReady(archiveFile);
+
+    if (!_hasModelFiles(modelDir.path)) {
+      try {
+        await _extractModelArchive(
+          archiveFile: archiveFile,
+          outputRoot: cacheRoot,
+        );
+      } catch (_) {
+        if (archiveFile.existsSync()) {
+          await archiveFile.delete();
+        }
+        await _ensureArchiveReady(archiveFile);
+        await _extractModelArchive(
+          archiveFile: archiveFile,
+          outputRoot: cacheRoot,
+        );
+      }
+    }
+
+    if (!_hasModelFiles(modelDir.path)) {
+      throw KiwiException(
+        'Downloaded model archive but required files are missing in ${modelDir.path}.',
+      );
+    }
+    return modelDir.path;
+  }
+
+  static bool _hasModelFiles(String modelDirPath) {
+    for (final String fileName in _modelFileNames) {
+      final File file = File('$modelDirPath/$fileName');
+      if (!file.existsSync()) {
+        return false;
+      }
+      final int minBytes = _minModelFileBytes[fileName] ?? 1;
+      if (file.lengthSync() < minBytes) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static Future<void> _ensureArchiveReady(File archiveFile) async {
+    if (!archiveFile.existsSync() || archiveFile.lengthSync() == 0) {
+      await _downloadFile(
+        uri: Uri.parse(_defaultModelArchiveUrl),
+        outputFile: archiveFile,
+      );
+    }
+    try {
+      await _verifyArchiveChecksum(archiveFile);
+    } catch (_) {
+      if (archiveFile.existsSync()) {
+        await archiveFile.delete();
+      }
+      await _downloadFile(
+        uri: Uri.parse(_defaultModelArchiveUrl),
+        outputFile: archiveFile,
+      );
+      await _verifyArchiveChecksum(archiveFile);
+    }
+  }
+
+  static Future<void> _verifyArchiveChecksum(File archiveFile) async {
+    final String expected = _defaultModelArchiveSha256.trim().toLowerCase();
+    if (expected.isEmpty) {
+      return;
+    }
+    final Digest digest = await sha256.bind(archiveFile.openRead()).first;
+    final String actual = digest.toString().toLowerCase();
+    if (actual != expected) {
+      throw KiwiException(
+        'Default model checksum mismatch. expected=$expected actual=$actual',
+      );
+    }
+  }
+
+  static Future<void> _downloadFile({
+    required Uri uri,
+    required File outputFile,
+  }) async {
+    final HttpClient client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 20);
+    try {
+      final HttpClientRequest request = await client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 20));
+      final HttpClientResponse response = await request.close().timeout(
+        const Duration(seconds: 30),
+      );
+      if (response.statusCode != HttpStatus.ok) {
+        throw KiwiException(
+          'Failed to download default model (${response.statusCode}) from $uri',
+        );
+      }
+
+      final File partial = File('${outputFile.path}.part');
+      if (partial.existsSync()) {
+        await partial.delete();
+      }
+      await partial.create(recursive: true);
+      final IOSink sink = partial.openWrite();
+      await for (final List<int> chunk in response.timeout(
+        const Duration(seconds: 30),
+        onTimeout: (EventSink<List<int>> sink) {
+          throw TimeoutException('Download stalled for 30 seconds.');
+        },
+      )) {
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+
+      if (outputFile.existsSync()) {
+        await outputFile.delete();
+      }
+      await partial.rename(outputFile.path);
+    } on KiwiException {
+      rethrow;
+    } catch (error) {
+      throw KiwiException(
+        'Failed to download default model from $uri: $error. '
+        'If network is restricted, pass modelPath/assetModelPath or set FLUTTER_KIWI_FFI_MODEL_PATH.',
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static Future<void> _extractModelArchive({
+    required File archiveFile,
+    required Directory outputRoot,
+  }) async {
+    try {
+      final String archivePath = archiveFile.path;
+      final String outputPath = outputRoot.path;
+      await Isolate.run(() => extractFileToDisk(archivePath, outputPath));
+    } catch (error) {
+      throw KiwiException(
+        'Failed to extract default model archive "${archiveFile.path}": $error',
+      );
+    }
+  }
+}

@@ -1,0 +1,15 @@
+# Run with `dart run ffigen --config ffigen.yaml`.
+name: FlutterKiwiFfiBindings
+description: |
+  Bindings for `src/flutter_kiwi_ffi.h`.
+
+  Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
+output: 'lib/flutter_kiwi_ffi_bindings_generated.dart'
+headers:
+  entry-points:
+    - 'src/flutter_kiwi_ffi.h'
+  include-directives:
+    - 'src/flutter_kiwi_ffi.h'
+comments:
+  style: any
+  length: full

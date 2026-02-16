@@ -1,0 +1,26 @@
+## 0.0.1
+
+* Bootstrap a native-first Flutter FFI plugin structure for Kiwi.
+* Replace template `sum` API with `KiwiAnalyzer` APIs (`create`, `analyze`, `addUserWord`, `close`).
+* Add match/build option constants and typed analysis result models.
+* Add conditional Dart export so web builds fail gracefully with `KiwiException`.
+* Introduce C wrapper API in `src/flutter_kiwi_ffi.h` and dynamic Kiwi C API bridge in `src/flutter_kiwi_ffi.c`.
+* Replace example app with a Kiwi GUI-style analyzer demo.
+* Add platform prebuilt layout hooks for bundling Kiwi binaries (`android jniLibs`, `linux/prebuilt`, `windows/prebuilt`, `ios/macos Frameworks`).
+* Add `tool/fetch_kiwi_release_assets.sh` to download official Kiwi release binaries/models into plugin paths.
+* Document Android release limitation (`libKiwiJava.so` only) for C API FFI usage.
+* Add `tool/build_android_libkiwi.sh` to build Android `libkiwi.so` for selected ABIs using Android NDK.
+* Add web backend (`kiwi-nlp` WASM) with `modelPath` URL-based loading.
+* Add native `assetModelPath` support: Kiwi model files can be bundled as Flutter assets and auto-extracted to temp storage for FFI initialization.
+* Add zero-argument initialization path discovery:
+  native auto-detects default asset model locations.
+* Add native default-model auto-download fallback (first run) with local cache, so integrations can call `KiwiAnalyzer.create()` without app-side model asset setup.
+* Update web backend defaults to `kiwi-nlp@0.22.1`.
+* Improve web zero-config model loading:
+  first try known same-origin asset bases, then fallback to release archive download (direct URL + GitHub API metadata fallback).
+* Bundle default Kiwi base model files in package assets (`assets/kiwi-models/cong/base`) so no app-side asset declaration is required for default usage.
+* Expand web initialization error messages with per-attempt details (asset base and archive URL/API attempts).
+* Switch web default model loading to URL-based `modelFiles` (`assets/packages/flutter_kiwi_ffi/...`) to avoid `rootBundle/AssetManifest` runtime issues in DDC.
+* Add Android ABI filters (`arm64-v8a`, `x86_64`) to avoid packaging unsupported 32-bit runtime combinations.
+* Make example error messages selectable (`SelectableText`) and print all caught errors to logs via `debugPrint`/`debugPrintStack`.
+* Add GitHub Actions desktop CI matrix at `.github/workflows/desktop-build.yml` to build example on Linux and Windows.
