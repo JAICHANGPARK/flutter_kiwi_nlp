@@ -14,8 +14,8 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 | Android | 지원 | `libkiwi.so`가 없으면 Android `preBuild` 단계에서 자동 빌드합니다. |
 | iOS | 지원 | `Kiwi.xcframework`가 없으면 `pod install` 단계에서 자동 생성합니다. |
 | macOS | 지원 | `libkiwi.dylib`가 없으면 `pod install` 단계에서 자동 생성합니다. |
-| Linux | 지원 | `libkiwi.so`가 없으면 Linux 빌드 단계에서 자동 생성합니다. |
-| Windows | 지원 | `kiwi.dll`이 없으면 Windows 빌드 단계에서 자동 생성합니다. |
+| Linux | 지원 | `libkiwi.so`가 없으면 Linux 빌드 단계에서 생성합니다. |
+| Windows | 지원 | `kiwi.dll`이 없으면 Windows 빌드 단계에서 생성합니다. |
 | Web | 지원 | `kiwi-nlp` WASM 백엔드를 사용합니다. |
 
 ## 미지원 플랫폼
@@ -32,6 +32,16 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 - 기본 모델 에셋 내장 (`assets/kiwi-models/cong/base`)
 - 네이티브: 기본 모델 자동 다운로드/캐시 fallback
 - 웹: 동일 출처 에셋 URL 실패 시 아카이브 다운로드 fallback
+
+## 스크린샷
+
+| Web | macOS |
+| --- | --- |
+| ![Web 데모](doc/web.png) | ![macOS 데모](doc/macos.png) |
+
+| Android (화면 1) | Android (화면 2) |
+| --- | --- |
+| ![Android 데모 1](doc/android_0.png) | ![Android 데모 2](doc/android_1.png) |
 
 ## 사용 가능한 API (요약 테이블)
 
@@ -440,6 +450,8 @@ flutter run -d chrome \
 
 - `linux/prebuilt/libkiwi.so`가 없으면 Linux 빌드 단계에서 자동 생성
 - 기본 타깃 아키텍처: 현재 호스트 아키텍처(`x86_64`, `arm64` 등)
+- 가능하면 Kiwi 공식 릴리스 prebuilt를 먼저 사용하고,
+  불가능하면 소스 빌드로 fallback
 - 필요 도구: Linux 호스트, `cmake`, `git`, C/C++ 빌드 도구
 - 한 번만 자동 빌드 비활성화:
   - `FLUTTER_KIWI_SKIP_LINUX_LIBRARY_BUILD=true flutter run -d linux`
@@ -455,6 +467,8 @@ flutter run -d chrome \
 
 - `windows/prebuilt/kiwi.dll`이 없으면 Windows 빌드 단계에서 자동 생성
 - 기본 타깃 아키텍처: CMake generator platform(`x64`, `Win32`, `arm64`)
+- 가능하면 Kiwi 공식 릴리스 prebuilt를 먼저 사용하고,
+  불가능하면 소스 빌드로 fallback
 - 필요 도구: Windows 호스트, PowerShell, Visual Studio C++ 툴체인,
   `cmake`, `git`
 - 한 번만 자동 빌드 비활성화:

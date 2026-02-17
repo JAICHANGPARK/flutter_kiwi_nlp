@@ -62,6 +62,16 @@ Use `flutter_kiwi_nlp` for dependency and import statements.
 - Native fallback default model download/cache.
 - Web fallback from same-origin asset URL loading to archive download.
 
+## Screenshots
+
+| Web | macOS |
+| --- | --- |
+| ![Web demo](doc/web.png) | ![macOS demo](doc/macos.png) |
+
+| Android (Screen 1) | Android (Screen 2) |
+| --- | --- |
+| ![Android demo 1](doc/android_0.png) | ![Android demo 2](doc/android_1.png) |
+
 ## Available APIs (Quick Table)
 
 ### Core API

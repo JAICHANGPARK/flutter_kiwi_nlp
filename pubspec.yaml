@@ -12,6 +12,16 @@ topics:
   - wasm
   - flutter-plugin
 
+screenshots:
+  - description: Android morphological analysis result screen.
+    path: doc/android_0.png
+  - description: Android tokenized output list screen.
+    path: doc/android_1.png
+  - description: macOS plugin demo screen.
+    path: doc/macos.png
+  - description: Web plugin demo screen.
+    path: doc/web.png
+
 environment:
   sdk: ^3.11.0
   flutter: '>=3.3.0'

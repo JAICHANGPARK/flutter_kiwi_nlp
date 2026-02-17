@@ -27,3 +27,4 @@
 * Add macOS auto-build flow via `tool/build_macos_kiwi_dylib.sh` and `macos/flutter_kiwi_nlp.podspec` `prepare_command`, so `libkiwi.dylib` is generated during macOS pod install when missing.
 * Add Linux auto-build flow via `tool/build_linux_libkiwi.sh` and `linux/CMakeLists.txt` custom target, so `libkiwi.so` is generated during Linux build when missing.
 * Add Windows auto-build flow via `tool/build_windows_kiwi_dll.ps1` and `windows/CMakeLists.txt` custom target, so `kiwi.dll` is generated during Windows build when missing.
+* Improve Linux/Windows native preparation to prefer official Kiwi release prebuilt assets and fallback to source build when prebuilt fetch is unavailable.

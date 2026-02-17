@@ -159,6 +159,67 @@ if [[ "$SKIP_EXISTING" -eq 1 && -s "${OUT_SO}" ]]; then
   exit 0
 fi
 
+map_release_arch() {
+  case "${1}" in
+    x86_64)
+      echo "x86_64"
+      ;;
+    arm64|aarch64)
+      echo "aarch64"
+      ;;
+    ppc64le)
+      echo "ppc64le"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+try_download_prebuilt() {
+  if [[ ! "${KIWI_REF}" =~ ^v[0-9] ]]; then
+    return 1
+  fi
+
+  local release_arch
+  release_arch="$(map_release_arch "${ARCH}")" || return 1
+
+  need_cmd curl
+  need_cmd tar
+
+  local version_no_v="${KIWI_REF#v}"
+  local asset="kiwi_lnx_${release_arch}_v${version_no_v}.tgz"
+  local url
+  url="https://github.com/bab2min/Kiwi/releases/download/${KIWI_REF}/${asset}"
+  local download_dir="${BUILD_ROOT}/download"
+  local extract_dir="${BUILD_ROOT}/extract-${release_arch}"
+  local archive_path="${download_dir}/${asset}"
+  local extracted_lib="${extract_dir}/lib/libkiwi.so"
+
+  mkdir -p "${download_dir}" "${extract_dir}" "$(dirname "${OUT_SO}")"
+  echo "[linux] Try prebuilt asset: ${asset}"
+  if ! curl -fL --retry 3 --retry-delay 1 -o "${archive_path}" "${url}"; then
+    echo "[linux] Prebuilt asset download failed; fallback to source build."
+    return 1
+  fi
+
+  rm -rf "${extract_dir}"
+  mkdir -p "${extract_dir}"
+  if ! tar -xzf "${archive_path}" -C "${extract_dir}"; then
+    echo "[linux] Prebuilt asset extract failed; fallback to source build."
+    return 1
+  fi
+
+  if [[ ! -f "${extracted_lib}" ]]; then
+    echo "[linux] Prebuilt asset missing libkiwi.so; fallback to source build."
+    return 1
+  fi
+
+  cp -f "${extracted_lib}" "${OUT_SO}"
+  echo "[linux] Generated from prebuilt: ${OUT_SO}"
+  return 0
+}
+
 prepare_kiwi_source() {
   if [[ -f "${KIWI_SRC}/CMakeLists.txt" ]]; then
     echo "[linux] Reusing Kiwi source: ${KIWI_SRC}"
@@ -194,6 +255,10 @@ resolve_so() {
   fi
   echo "${so_path}"
 }
+
+if try_download_prebuilt; then
+  exit 0
+fi
 
 prepare_kiwi_source
 

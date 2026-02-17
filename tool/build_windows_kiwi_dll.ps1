@@ -9,6 +9,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+trap {
+  Write-Host "[windows] ERROR: $($_.Exception.Message)"
+  exit 1
+}
 
 function Test-Truthy {
   param([string]$Value)
@@ -76,6 +80,65 @@ function Resolve-KiwiCpuArch {
   }
 }
 
+function Try-DownloadPrebuilt {
+  param(
+    [string]$Ref,
+    [string]$WindowsArch,
+    [string]$OutDllPath,
+    [string]$BuildRoot
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Ref)) {
+    return $false
+  }
+  if (-not $Ref.StartsWith("v")) {
+    return $false
+  }
+
+  $releaseArch = switch ($WindowsArch.ToLowerInvariant()) {
+    "x64" { "x64" }
+    "win32" { "Win32" }
+    default { $null }
+  }
+  if ($null -eq $releaseArch) {
+    return $false
+  }
+
+  $versionNoV = $Ref.Substring(1)
+  if ([string]::IsNullOrWhiteSpace($versionNoV)) {
+    return $false
+  }
+
+  $asset = "kiwi_win_${releaseArch}_v${versionNoV}.zip"
+  $url = "https://github.com/bab2min/Kiwi/releases/download/$Ref/$asset"
+  $downloadDir = Join-Path $BuildRoot "download"
+  $extractDir = Join-Path $BuildRoot "extract-$releaseArch"
+  $archivePath = Join-Path $downloadDir $asset
+  $candidate = Join-Path $extractDir "lib\kiwi.dll"
+
+  try {
+    New-Item -ItemType Directory -Force $downloadDir | Out-Null
+    New-Item -ItemType Directory -Force `
+      (Split-Path -Parent $OutDllPath) | Out-Null
+    Write-Host "[windows] Try prebuilt asset: $asset"
+    Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing
+
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $extractDir
+    Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
+
+    if (-not (Test-Path $candidate)) {
+      throw "Prebuilt asset missing kiwi.dll at $candidate"
+    }
+
+    Copy-Item -Force $candidate $OutDllPath
+    Write-Host "[windows] Generated from prebuilt: $OutDllPath"
+    return $true
+  } catch {
+    Write-Host "[windows] Prebuilt asset failed; fallback to source build."
+    return $false
+  }
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = (Resolve-Path (Join-Path $scriptDir "..")).Path
 $defaultKiwiSrc = Join-Path $rootDir ".tmp\kiwi-src-windows"
@@ -138,6 +201,13 @@ if (
   ((Get-Item $outDll).Length -gt 0)
 ) {
   Write-Host "[windows] Reusing existing library: $outDll"
+  exit 0
+}
+
+if (
+  Try-DownloadPrebuilt -Ref $KiwiRef -WindowsArch $Arch `
+    -OutDllPath $outDll -BuildRoot $buildRoot
+) {
   exit 0
 }
 

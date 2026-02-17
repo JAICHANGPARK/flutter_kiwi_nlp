@@ -51,4 +51,4 @@ jobs:
 
       - name: Build example app
         working-directory: example
-        run: flutter build ${{ matrix.target }}
+        run: flutter build ${{ matrix.target }} -v

@@ -14,8 +14,8 @@ Use `flutter_kiwi_nlp` for dependency and import statements.
 | Android | Supported | Builds `libkiwi.so` automatically during Android `preBuild` if missing. |
 | iOS | Supported | Generates `Kiwi.xcframework` automatically during `pod install` when missing. |
 | macOS | Supported | Builds `libkiwi.dylib` automatically during `pod install` when missing. |
-| Linux | Supported | Builds `libkiwi.so` automatically during Linux build when missing. |
-| Windows | Supported | Builds `kiwi.dll` automatically during Windows build when missing. |
+| Linux | Supported | Generates `libkiwi.so` during Linux build when missing. |
+| Windows | Supported | Generates `kiwi.dll` during Windows build when missing. |
 | Web | Supported | Uses `kiwi-nlp` WASM backend. |
 
 ## Unsupported Platforms
@@ -32,6 +32,16 @@ Use `flutter_kiwi_nlp` for dependency and import statements.
 - Built-in default model assets (`assets/kiwi-models/cong/base`).
 - Native fallback default model download/cache.
 - Web fallback from same-origin asset URL loading to archive download.
+
+## Screenshots
+
+| Web | macOS |
+| --- | --- |
+| ![Web demo](doc/web.png) | ![macOS demo](doc/macos.png) |
+
+| Android (Screen 1) | Android (Screen 2) |
+| --- | --- |
+| ![Android demo 1](doc/android_0.png) | ![Android demo 2](doc/android_1.png) |
 
 ## Available APIs (Quick Table)
 
@@ -444,6 +454,8 @@ The plugin runs `tool/build_linux_libkiwi.sh` from
 - If `linux/prebuilt/libkiwi.so` is missing, it is generated during Linux
   build.
 - Default target arch: host arch (`x86_64`, `arm64`, etc.).
+- It first tries official Kiwi release prebuilt assets, then falls back to
+  source build when unavailable.
 - Required tools: Linux host, `cmake`, `git`, C/C++ build toolchain.
 - Skip automatic build for one run with:
   - `FLUTTER_KIWI_SKIP_LINUX_LIBRARY_BUILD=true flutter run -d linux`
@@ -460,6 +472,8 @@ The plugin runs `tool/build_windows_kiwi_dll.ps1` from
 - If `windows/prebuilt/kiwi.dll` is missing, it is generated during
   Windows build.
 - Default target arch: CMake generator platform (`x64`, `Win32`, `arm64`).
+- It first tries official Kiwi release prebuilt assets, then falls back to
+  source build when unavailable.
 - Required tools: Windows host, PowerShell, Visual Studio C++ toolchain,
   `cmake`, `git`.
 - Skip automatic build for one run with:
