@@ -89,6 +89,32 @@ On unsupported platforms, creating or calling `KiwiAnalyzer` throws
 | `KiwiToken.score`/`typoCost` | `double` | Token score and typo cost. |
 | `KiwiException` | `Exception` | Plugin error type. Check the `message` field for details. |
 
+## Size Impact (Approx.) and `kiwipiepy` Comparison
+
+As of `2026-02-17`:
+
+| Item | Basis | Size (Approx.) | Notes |
+| --- | --- | --- | --- |
+| `flutter_kiwi_nlp` default model | Uncompressed model directory (`assets/kiwi-models/cong/base`) | `95MB` | Actual model file set that may be bundled as app assets |
+| `flutter_kiwi_nlp` default model (tgz) | Same directory compressed locally (`/tmp/flutter_kiwi_model_base.tgz`) | `76MB` | Local compressed-size reference for fair comparison |
+| `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5MB` | Published compressed package size on PyPI |
+| Android `libkiwi.so` (reference) | Workspace build outputs in this repo | `159MB (arm64-v8a)`, `191MB (x86_64)` | Current binaries are `with debug_info`, `not stripped` |
+
+Why do the numbers look different?
+
+- Different measurement bases produce different numbers.
+- `76MB`/`79.5MB` are compressed archives, while `95MB` is uncompressed model
+  contents.
+- Android native binaries are per-ABI, and size grows significantly when debug
+  symbols are included.
+- Store delivery size is usually smaller due to strip/compress/split in release
+  pipelines.
+
+References:
+
+- https://pypi.org/project/kiwipiepy-model/
+- https://pypi.org/project/kiwipiepy/
+
 ## Install
 
 ### 1) Install from pub.dev (recommended)

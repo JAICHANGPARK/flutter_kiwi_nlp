@@ -88,6 +88,32 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 | `KiwiToken.score`/`typoCost` | `double` | 토큰 점수/오타 비용입니다. |
 | `KiwiException` | `Exception` | 플러그인 오류 타입입니다. `message` 필드로 상세 원인을 확인할 수 있습니다. |
 
+## 용량 영향 (대략) 및 `kiwipiepy` 비교
+
+기준일: `2026-02-17`
+
+| 항목 | 기준 | 크기(대략) | 비고 |
+| --- | --- | --- | --- |
+| `flutter_kiwi_nlp` 기본 모델 | 압축 해제 모델 디렉터리 (`assets/kiwi-models/cong/base`) | `95MB` | 앱 에셋으로 포함될 수 있는 실제 모델 파일 집합 |
+| `flutter_kiwi_nlp` 기본 모델 (tgz) | 동일 디렉터리를 로컬에서 tar.gz 압축 (`/tmp/flutter_kiwi_model_base.tgz`) | `76MB` | 압축 기준 비교용 로컬 측정치 |
+| `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5MB` | PyPI에 게시된 압축 배포 파일 크기 |
+| Android `libkiwi.so` (참고) | 이 저장소 워크스페이스 빌드 산출물 | `159MB (arm64-v8a)`, `191MB (x86_64)` | 현재 파일은 `with debug_info`, `not stripped` 상태 |
+
+왜 숫자가 달라 보이나요?
+
+- 비교 기준이 다르면 숫자가 크게 달라집니다.
+- `76MB`/`79.5MB`는 압축본(`.tgz`) 크기이고, `95MB`는 압축 해제된
+  모델 파일 총합입니다.
+- Android 네이티브 라이브러리는 ABI별 파일이 따로 있고, 디버그 심볼이
+  포함되면 크기가 크게 증가합니다.
+- 실제 스토어 배포 시에는 플랫폼별 strip/compress/split 적용으로
+  다운로드 크기가 더 작아질 수 있습니다.
+
+참고 링크:
+
+- https://pypi.org/project/kiwipiepy-model/
+- https://pypi.org/project/kiwipiepy/
+
 ## 설치
 
 ### 1) pub.dev에서 설치 (권장)
