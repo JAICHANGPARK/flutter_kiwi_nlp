@@ -13,40 +13,64 @@ import 'kiwi_options.dart';
 import 'kiwi_types.dart';
 
 const String _defaultModuleUrl = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODULE_URL',
-  defaultValue: 'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.22.1/dist/index.js',
+  'FLUTTER_KIWI_NLP_WEB_MODULE_URL',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODULE_URL',
+    defaultValue: 'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.22.1/dist/index.js',
+  ),
 );
 const String _defaultWasmUrl = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_WASM_URL',
-  defaultValue:
-      'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.22.1/dist/kiwi-wasm.wasm',
+  'FLUTTER_KIWI_NLP_WEB_WASM_URL',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_WASM_URL',
+    defaultValue:
+        'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.22.1/dist/kiwi-wasm.wasm',
+  ),
 );
 const String _defaultModelBaseUrl = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODEL_BASE_URL',
-  defaultValue: '',
+  'FLUTTER_KIWI_NLP_WEB_MODEL_BASE_URL',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODEL_BASE_URL',
+    defaultValue: '',
+  ),
 );
 const String _defaultModelGithubRepo = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODEL_GITHUB_REPO',
-  defaultValue: 'bab2min/Kiwi',
+  'FLUTTER_KIWI_NLP_WEB_MODEL_GITHUB_REPO',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODEL_GITHUB_REPO',
+    defaultValue: 'bab2min/Kiwi',
+  ),
 );
 const String _defaultModelArchiveVersion = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_VERSION',
-  defaultValue: 'v0.22.2',
+  'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_VERSION',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_VERSION',
+    defaultValue: 'v0.22.2',
+  ),
 );
 const String _defaultModelArchiveName = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_NAME',
-  defaultValue: 'kiwi_model_v0.22.2_base.tgz',
+  'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_NAME',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_NAME',
+    defaultValue: 'kiwi_model_v0.22.2_base.tgz',
+  ),
 );
 const String _defaultModelArchiveUrl = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_URL',
-  defaultValue: '',
+  'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_URL',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_URL',
+    defaultValue: '',
+  ),
 );
 const String _defaultModelArchiveSha256 = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_SHA256',
-  defaultValue: '',
+  'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_SHA256',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_SHA256',
+    defaultValue: '',
+  ),
 );
 const String _defaultAssetModelBaseUrl =
-    'assets/packages/flutter_kiwi_ffi/assets/kiwi-models/cong/base';
+    'assets/packages/flutter_kiwi_nlp/assets/kiwi-models/cong/base';
 
 const List<String> _modelFileNames = <String>[
   'combiningRule.txt',
@@ -496,7 +520,8 @@ Future<Map<String, Uint8List>> _downloadDefaultWebModelFiles() async {
       'Failed to prepare default web model: $details. '
       'Attempts: ${attempts.join(' | ')}. '
       'On web, host model files on same-origin assets or pass '
-      'modelPath/assetModelPath/FLUTTER_KIWI_FFI_WEB_MODEL_BASE_URL.',
+      'modelPath/assetModelPath/FLUTTER_KIWI_NLP_WEB_MODEL_BASE_URL '
+      '(legacy: FLUTTER_KIWI_FFI_WEB_MODEL_BASE_URL).',
     );
   }
 }
@@ -796,5 +821,5 @@ JSAny? _normalizeJsAny(JSAny? value) {
 
 void _webLog(String message) {
   // ignore: avoid_print
-  print('[flutter_kiwi_ffi/web] $message');
+  print('[flutter_kiwi_nlp/web] $message');
 }

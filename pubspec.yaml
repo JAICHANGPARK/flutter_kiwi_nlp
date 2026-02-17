@@ -1,4 +1,4 @@
-name: flutter_kiwi_ffi
+name: flutter_kiwi_nlp
 description: "Flutter plugin for Korean morphological analysis with Kiwi via native FFI and web WASM."
 version: 0.0.1
 homepage: https://github.com/JAICHANGPARK/flutter_kiwi_nlp
@@ -60,8 +60,8 @@ flutter:
       macos:
         ffiPlugin: true
       web:
-        pluginClass: FlutterKiwiFfiWeb
-        fileName: flutter_kiwi_ffi_web.dart
+        pluginClass: FlutterKiwiNlpWeb
+        fileName: flutter_kiwi_nlp_web.dart
       windows:
         ffiPlugin: true
   assets:

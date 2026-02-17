@@ -228,14 +228,14 @@ if [[ "$FETCH_MODEL" -eq 1 ]]; then
   tar -xzf "$MODEL_ARCHIVE" -C "$MODEL_ROOT"
   echo "[kiwi] Model extracted to: $MODEL_ROOT/models/cong/base"
   echo "[kiwi] Export this for local run:"
-  echo "       FLUTTER_KIWI_FFI_MODEL_PATH=$MODEL_ROOT/models/cong/base"
+  echo "       FLUTTER_KIWI_NLP_MODEL_PATH=$MODEL_ROOT/models/cong/base"
 fi
 
 if [[ "$FETCH_ANDROID" -eq 1 ]]; then
   cat <<'EOF'
 [kiwi] Android note:
        GitHub Releases currently ship Android as libKiwiJava.so (JNI wrapper),
-       not libkiwi.so (C API). flutter_kiwi_ffi uses Kiwi C API symbols, so
+       not libkiwi.so (C API). flutter_kiwi_nlp uses Kiwi C API symbols, so
        Android prebuilt is not auto-installed by this script.
        For Android FFI, build libkiwi.so from source for each ABI.
 EOF

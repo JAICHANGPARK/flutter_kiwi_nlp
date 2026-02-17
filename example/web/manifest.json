@@ -1,6 +1,6 @@
 {
-    "name": "flutter_kiwi_ffi_example",
-    "short_name": "flutter_kiwi_ffi_example",
+    "name": "flutter_kiwi_nlp_example",
+    "short_name": "flutter_kiwi_nlp_example",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

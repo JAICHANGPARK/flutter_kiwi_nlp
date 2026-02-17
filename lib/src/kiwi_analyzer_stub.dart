@@ -3,7 +3,7 @@ import 'kiwi_options.dart';
 import 'kiwi_types.dart';
 
 const String _unsupportedMessage =
-    'flutter_kiwi_ffi native backend is not available on this platform yet.';
+    'flutter_kiwi_nlp native backend is not available on this platform yet.';
 
 class KiwiAnalyzer {
   KiwiAnalyzer._();

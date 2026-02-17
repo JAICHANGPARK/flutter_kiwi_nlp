@@ -255,12 +255,19 @@ static int load_symbol(void** output, const char* symbol_name) {
 static int load_kiwi_library_once(void) {
   if (g_kiwi_api_loaded) return 0;
 
-  const char* override_path = getenv("FLUTTER_KIWI_FFI_LIBRARY_PATH");
+  const char* override_path = getenv("FLUTTER_KIWI_NLP_LIBRARY_PATH");
+  if (!override_path || !*override_path) {
+    override_path = getenv("FLUTTER_KIWI_FFI_LIBRARY_PATH");
+  }
   if (override_path && *override_path) {
     g_kiwi_lib = kiwi_dlopen(override_path);
     if (!g_kiwi_lib) {
       char message[512];
-      snprintf(message, sizeof(message), "Failed to load Kiwi library from FLUTTER_KIWI_FFI_LIBRARY_PATH=%s", override_path);
+      snprintf(
+          message,
+          sizeof(message),
+          "Failed to load Kiwi library from FLUTTER_KIWI_NLP_LIBRARY_PATH (legacy: FLUTTER_KIWI_FFI_LIBRARY_PATH): %s",
+          override_path);
       wrapper_set_error(message);
       return -1;
     }
@@ -288,7 +295,8 @@ static int load_kiwi_library_once(void) {
       if (g_kiwi_lib) break;
     }
     if (!g_kiwi_lib) {
-      wrapper_set_error("Failed to load Kiwi dynamic library. Set FLUTTER_KIWI_FFI_LIBRARY_PATH.");
+      wrapper_set_error(
+          "Failed to load Kiwi dynamic library. Set FLUTTER_KIWI_NLP_LIBRARY_PATH (legacy: FLUTTER_KIWI_FFI_LIBRARY_PATH).");
       return -1;
     }
   }
@@ -358,11 +366,15 @@ FFI_PLUGIN_EXPORT flutter_kiwi_ffi_handle_t* flutter_kiwi_ffi_init(
     g_kiwi_api.kiwi_clear_error();
   }
 
-  const char* resolved_model_path = (model_path && *model_path)
-      ? model_path
-      : getenv("FLUTTER_KIWI_FFI_MODEL_PATH");
+  const char* env_model_path = getenv("FLUTTER_KIWI_NLP_MODEL_PATH");
+  if (!env_model_path || !*env_model_path) {
+    env_model_path = getenv("FLUTTER_KIWI_FFI_MODEL_PATH");
+  }
+  const char* resolved_model_path =
+      (model_path && *model_path) ? model_path : env_model_path;
   if (!resolved_model_path || !*resolved_model_path) {
-    wrapper_set_error("Model path is required. Pass modelPath or set FLUTTER_KIWI_FFI_MODEL_PATH.");
+    wrapper_set_error(
+        "Model path is required. Pass modelPath or set FLUTTER_KIWI_NLP_MODEL_PATH (legacy: FLUTTER_KIWI_FFI_MODEL_PATH).");
     return NULL;
   }
 

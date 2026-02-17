@@ -126,3 +126,7 @@ app.*.symbols
 android/src/main/jniLibs/*/libkiwi.so
 !android/src/main/jniLibs/*/.gitkeep
 ios/Frameworks/Kiwi.xcframework/
+macos/Frameworks/libkiwi.dylib
+macos/Frameworks/Kiwi.xcframework/
+linux/prebuilt/libkiwi.so
+windows/prebuilt/kiwi.dll

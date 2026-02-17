@@ -1,6 +1,6 @@
-# flutter_kiwi_ffi_example
+# flutter_kiwi_nlp_example
 
-Kiwi analyzer demo app for `flutter_kiwi_ffi`.
+Kiwi analyzer demo app for `flutter_kiwi_nlp`.
 
 ## Model setup
 

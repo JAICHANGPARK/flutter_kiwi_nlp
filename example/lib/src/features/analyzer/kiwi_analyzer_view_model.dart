@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_kiwi_ffi/flutter_kiwi_ffi.dart';
+import 'package:flutter_kiwi_nlp/flutter_kiwi_nlp.dart';
 
 import '../../default_model_path_stub.dart'
     if (dart.library.io) '../../default_model_path_io.dart'

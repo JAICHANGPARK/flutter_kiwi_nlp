@@ -20,7 +20,10 @@
   first try known same-origin asset bases, then fallback to release archive download (direct URL + GitHub API metadata fallback).
 * Bundle default Kiwi base model files in package assets (`assets/kiwi-models/cong/base`) so no app-side asset declaration is required for default usage.
 * Expand web initialization error messages with per-attempt details (asset base and archive URL/API attempts).
-* Switch web default model loading to URL-based `modelFiles` (`assets/packages/flutter_kiwi_ffi/...`) to avoid `rootBundle/AssetManifest` runtime issues in DDC.
+* Switch web default model loading to URL-based `modelFiles` (`assets/packages/flutter_kiwi_nlp/...`) to avoid `rootBundle/AssetManifest` runtime issues in DDC.
 * Add Android ABI filters (`arm64-v8a`, `x86_64`) to avoid packaging unsupported 32-bit runtime combinations.
 * Make example error messages selectable (`SelectableText`) and print all caught errors to logs via `debugPrint`/`debugPrintStack`.
 * Add GitHub Actions desktop CI matrix at `.github/workflows/desktop-build.yml` to build example on Linux and Windows.
+* Add macOS auto-build flow via `tool/build_macos_kiwi_dylib.sh` and `macos/flutter_kiwi_nlp.podspec` `prepare_command`, so `libkiwi.dylib` is generated during macOS pod install when missing.
+* Add Linux auto-build flow via `tool/build_linux_libkiwi.sh` and `linux/CMakeLists.txt` custom target, so `libkiwi.so` is generated during Linux build when missing.
+* Add Windows auto-build flow via `tool/build_windows_kiwi_dll.ps1` and `windows/CMakeLists.txt` custom target, so `kiwi.dll` is generated during Windows build when missing.

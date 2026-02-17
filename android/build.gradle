@@ -1,6 +1,6 @@
 // The Android Gradle Plugin builds the native code with the Android NDK.
 
-group = "com.example.flutter_kiwi_ffi"
+group = "com.example.flutter_kiwi_nlp"
 version = "1.0"
 
 buildscript {
@@ -69,7 +69,7 @@ tasks.register("prepareKiwiAndroidLibs", Exec) {
 }
 
 android {
-    namespace = "com.example.flutter_kiwi_ffi"
+    namespace = "com.example.flutter_kiwi_nlp"
 
     // Bumping the plugin compileSdk version requires all clients of this plugin
     // to bump the version in their app.

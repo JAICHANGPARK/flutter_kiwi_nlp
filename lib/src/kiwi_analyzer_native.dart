@@ -15,44 +15,79 @@ import 'kiwi_exception.dart';
 import 'kiwi_options.dart';
 import 'kiwi_types.dart';
 
-const String _libName = 'flutter_kiwi_ffi';
-
-final DynamicLibrary _dylib = () {
-  if (Platform.isMacOS || Platform.isIOS) {
-    return DynamicLibrary.open('$_libName.framework/$_libName');
-  }
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('lib$_libName.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('$_libName.dll');
-  }
-  throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
-}();
+final DynamicLibrary _dylib = _openPluginDynamicLibrary();
 
 final FlutterKiwiFfiBindings _bindings = FlutterKiwiFfiBindings(_dylib);
 
+DynamicLibrary _openPluginDynamicLibrary() {
+  final List<String> candidates = <String>[
+    if (Platform.isMacOS || Platform.isIOS) ...<String>[
+      'flutter_kiwi_nlp.framework/flutter_kiwi_nlp',
+      'flutter_kiwi_ffi.framework/flutter_kiwi_ffi',
+    ],
+    if (Platform.isAndroid || Platform.isLinux) ...<String>[
+      'libflutter_kiwi_ffi.so',
+      'libflutter_kiwi_nlp.so',
+    ],
+    if (Platform.isWindows) ...<String>[
+      'flutter_kiwi_ffi.dll',
+      'flutter_kiwi_nlp.dll',
+    ],
+  ];
+  if (candidates.isEmpty) {
+    throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+  }
+
+  final List<String> errors = <String>[];
+  for (final String path in candidates) {
+    try {
+      return DynamicLibrary.open(path);
+    } catch (error) {
+      errors.add('$path => $error');
+    }
+  }
+
+  throw ArgumentError(
+    'Failed to load Kiwi native bridge library. '
+    'Tried: ${candidates.join(', ')}. '
+    'Errors: ${errors.join(' | ')}',
+  );
+}
+
 const String _defaultAssetModelPath = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_ASSET_MODEL_PATH',
-  defaultValue: '',
+  'FLUTTER_KIWI_NLP_ASSET_MODEL_PATH',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_ASSET_MODEL_PATH',
+    defaultValue: '',
+  ),
 );
 const String _defaultModelArchiveUrl = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_URL',
-  defaultValue:
-      'https://github.com/bab2min/Kiwi/releases/download/v0.22.2/kiwi_model_v0.22.2_base.tgz',
+  'FLUTTER_KIWI_NLP_MODEL_ARCHIVE_URL',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_URL',
+    defaultValue:
+        'https://github.com/bab2min/Kiwi/releases/download/v0.22.2/kiwi_model_v0.22.2_base.tgz',
+  ),
 );
 const String _defaultModelCacheKey = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_MODEL_CACHE_KEY',
-  defaultValue: 'v0.22.2_base',
+  'FLUTTER_KIWI_NLP_MODEL_CACHE_KEY',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_MODEL_CACHE_KEY',
+    defaultValue: 'v0.22.2_base',
+  ),
 );
 const String _defaultModelArchiveSha256 = String.fromEnvironment(
-  'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_SHA256',
-  defaultValue:
-      'aa11a6e5b06c7db43e9b07148620f5fb7838a30172dacb40f75202333110f2d1',
+  'FLUTTER_KIWI_NLP_MODEL_ARCHIVE_SHA256',
+  defaultValue: String.fromEnvironment(
+    'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_SHA256',
+    defaultValue:
+        'aa11a6e5b06c7db43e9b07148620f5fb7838a30172dacb40f75202333110f2d1',
+  ),
 );
 const List<String> _autoAssetModelPaths = <String>[
   'assets/kiwi-models/cong/base',
   'packages/flutter_kiwi_ffi_models/assets/kiwi-models/cong/base',
+  'packages/flutter_kiwi_nlp/assets/kiwi-models/cong/base',
   'packages/flutter_kiwi_ffi/assets/kiwi-models/cong/base',
 ];
 
@@ -99,7 +134,8 @@ class KiwiAnalyzer {
     if (resolvedModelPath == null || resolvedModelPath.isEmpty) {
       throw KiwiException(
         'Kiwi model not found. '
-        'Pass modelPath/assetModelPath, set FLUTTER_KIWI_FFI_MODEL_PATH, '
+        'Pass modelPath/assetModelPath, set FLUTTER_KIWI_NLP_MODEL_PATH '
+        '(legacy: FLUTTER_KIWI_FFI_MODEL_PATH), '
         'or allow default model download.',
       );
     }
@@ -230,7 +266,10 @@ class KiwiAnalyzer {
     }
 
     final String envModelPath =
-        (Platform.environment['FLUTTER_KIWI_FFI_MODEL_PATH'] ?? '').trim();
+        (Platform.environment['FLUTTER_KIWI_NLP_MODEL_PATH'] ??
+                Platform.environment['FLUTTER_KIWI_FFI_MODEL_PATH'] ??
+                '')
+            .trim();
     if (envModelPath.isNotEmpty) {
       return envModelPath;
     }
@@ -271,7 +310,7 @@ class KiwiAnalyzer {
         .encode(utf8.encode(normalized))
         .replaceAll('=', '');
     final Directory outputDir = Directory(
-      '${Directory.systemTemp.path}/flutter_kiwi_ffi_model/$cacheKey',
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model/$cacheKey',
     );
     await outputDir.create(recursive: true);
 
@@ -325,7 +364,7 @@ class KiwiAnalyzer {
 
   static Future<String> _downloadDefaultModelIfNeededImpl() async {
     final String cacheRootPath =
-        '${Directory.systemTemp.path}/flutter_kiwi_ffi_model_cache/$_defaultModelCacheKey';
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/$_defaultModelCacheKey';
     final Directory cacheRoot = Directory(cacheRootPath);
     final Directory modelDir = Directory('$cacheRootPath/models/cong/base');
     if (_hasModelFiles(modelDir.path)) {
@@ -456,7 +495,9 @@ class KiwiAnalyzer {
     } catch (error) {
       throw KiwiException(
         'Failed to download default model from $uri: $error. '
-        'If network is restricted, pass modelPath/assetModelPath or set FLUTTER_KIWI_FFI_MODEL_PATH.',
+        'If network is restricted, pass modelPath/assetModelPath '
+        'or set FLUTTER_KIWI_NLP_MODEL_PATH '
+        '(legacy: FLUTTER_KIWI_FFI_MODEL_PATH).',
       );
     } finally {
       client.close(force: true);
