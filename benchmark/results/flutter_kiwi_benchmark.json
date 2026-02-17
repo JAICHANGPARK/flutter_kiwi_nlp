@@ -1,20 +1,20 @@
 {
   "runtime": "flutter_kiwi_nlp",
   "platform": "macos",
-  "generated_at_utc": "2026-02-17T09:06:09.622240Z",
+  "generated_at_utc": "2026-02-17T10:14:25.268892Z",
   "warmup_runs": 3,
   "measure_runs": 15,
   "top_n": 1,
   "num_threads": -1,
   "sentence_count": 40,
-  "init_ms": 1353.393,
-  "elapsed_ms": 249.127,
+  "init_ms": 1315.837,
+  "elapsed_ms": 230.74,
   "total_analyses": 600,
   "total_chars": 20340,
   "total_tokens": 9660,
-  "analyses_per_sec": 2408.4101683077306,
-  "chars_per_sec": 81645.10470563207,
-  "tokens_per_sec": 38775.40370975446,
-  "avg_latency_ms": 0.4152116666666667,
-  "avg_token_latency_us": 25.789544513457557
+  "analyses_per_sec": 2600.3293750541734,
+  "chars_per_sec": 88151.16581433648,
+  "tokens_per_sec": 41865.302938372195,
+  "avg_latency_ms": 0.38456666666666667,
+  "avg_token_latency_us": 23.886128364389233
 }

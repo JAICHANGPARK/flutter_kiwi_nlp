@@ -28,8 +28,8 @@
 - API는 `Future` 기반 비동기 모델이라 UI 스레드를 막지 않는다.
 - 사용자 사전(`addUserWord`)을 런타임에 추가할 수 있다.
 - 동일 코퍼스/동일 조건에서 비교한 실측 결과(2026-02-17, macOS arm64) 기준:
-  - 처리량(analyses/s): `flutter_kiwi_nlp` 2408.41, `kiwipiepy` 3666.54
-  - 평균 지연(ms): `flutter_kiwi_nlp` 0.42, `kiwipiepy` 0.27
+  - 처리량(analyses/s): `flutter_kiwi_nlp` 2512.32, `kiwipiepy` 4061.90
+  - 평균 지연(ms): `flutter_kiwi_nlp` 0.40, `kiwipiepy` 0.25
 - 결론: Python 레퍼런스 대비 느린 구간이 있지만, 앱 내 직접 탑재와 단일 Flutter API라는 장점이 크다.
 
 ---
@@ -459,12 +459,12 @@ uv run --with kiwipiepy python tool/benchmark/run_compare.py \
 
 | Metric | flutter_kiwi_nlp | kiwipiepy | Ratio (Flutter/Kiwi) |
 | --- | ---: | ---: | ---: |
-| Init time (ms, lower better) | 1353.39 | 917.27 | 1.48x (slower) |
-| Throughput (analyses/s, higher better) | 2408.41 | 3666.54 | 0.66x (slower) |
-| Throughput (chars/s, higher better) | 81645.10 | 124295.69 | 0.66x (slower) |
-| Throughput (tokens/s, higher better) | 38775.40 | 58939.62 | 0.66x (slower) |
-| Avg latency (ms, lower better) | 0.42 | 0.27 | 1.52x (slower) |
-| Avg token latency (us/token, lower better) | 25.79 | 16.97 | 1.52x (slower) |
+| Init time (ms, lower better) | 1263.38 | 638.99 | 1.98x (slower) |
+| Throughput (analyses/s, higher better) | 2512.32 | 4061.90 | 0.62x (slower) |
+| Throughput (chars/s, higher better) | 85167.68 | 137698.25 | 0.62x (slower) |
+| Throughput (tokens/s, higher better) | 40448.37 | 65294.97 | 0.62x (slower) |
+| Avg latency (ms, lower better) | 0.40 | 0.25 | 1.62x (slower) |
+| Avg token latency (us/token, lower better) | 24.72 | 15.32 | 1.61x (slower) |
 
 원본 산출물:
 
@@ -606,14 +606,14 @@ uv run --with kiwipiepy python tool/benchmark/run_compare.py \
 
 ```text
 flutter_kiwi_nlp:
-  init_ms=1353.393
-  analyses_per_sec=2408.4101683077306
-  avg_latency_ms=0.4152116666666667
+  init_ms=1263.382
+  analyses_per_sec=2512.3208401200886
+  avg_latency_ms=0.3980383333333333
 
 kiwipiepy:
-  init_ms=917.2669580148067
-  analyses_per_sec=3666.539433756072
-  avg_latency_ms=0.2727367366605904
+  init_ms=638.9862920041196
+  analyses_per_sec=4061.895377877922
+  avg_latency_ms=0.24619048669895469
 ```
 
 위 값은 단일 머신 단일 실행 결과입니다.  
