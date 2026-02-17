@@ -2,6 +2,29 @@
 
 Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 
+## Table of Contents
+
+- [Package Name](#package-name)
+- [AI Integration Guide](#ai-integration-guide)
+- [Supported Platforms](#supported-platforms)
+- [Unsupported Platforms](#unsupported-platforms)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Available APIs (Quick Table)](#available-apis-quick-table)
+- [Size Impact (Approx.) and `kiwipiepy` Comparison](#size-impact-approx-and-kiwipiepy-comparison)
+- [Install](#install)
+- [Integrate Into a Flutter App](#integrate-into-a-flutter-app)
+- [Common Usage Patterns](#common-usage-patterns)
+- [Model Path Configuration Guide](#model-path-configuration-guide)
+- [Model Path Resolution](#model-path-resolution)
+- [Android Auto Build](#android-auto-build)
+- [iOS Auto Prepare](#ios-auto-prepare)
+- [macOS Auto Prepare](#macos-auto-prepare)
+- [Linux Auto Prepare](#linux-auto-prepare)
+- [Windows Auto Prepare](#windows-auto-prepare)
+- [Common Issues](#common-issues)
+- [License](#license)
+
 ## Package Name
 
 Package name in `pubspec.yaml` is `flutter_kiwi_nlp`.
