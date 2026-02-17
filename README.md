@@ -2,6 +2,15 @@
 
 Korean morphological analysis plugin for Flutter powered by Kiwi.
 
+## Table of Contents
+
+- [Documentation](#documentation)
+- [AI Guide (for assistant users)](#ai-guide-for-assistant-users)
+- [Platform Status (Summary)](#platform-status-summary)
+- [Package Name](#package-name)
+- [English Full Guide](#flutter_kiwi_nlp-english)
+- [English Table of Contents](#english-table-of-contents)
+
 ## Documentation
 
 - Korean: [`README.ko.md`](README.ko.md)
@@ -44,6 +53,29 @@ Korean morphological analysis plugin for Flutter powered by Kiwi.
 # flutter_kiwi_nlp (English)
 
 Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
+
+## English Table of Contents
+
+- [Package Name](#package-name-1)
+- [AI Integration Guide](#ai-integration-guide)
+- [Supported Platforms](#supported-platforms)
+- [Unsupported Platforms](#unsupported-platforms)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Available APIs (Quick Table)](#available-apis-quick-table)
+- [Size Impact (Approx.) and `kiwipiepy` Comparison](#size-impact-approx-and-kiwipiepy-comparison)
+- [Install](#install)
+- [Integrate Into a Flutter App](#integrate-into-a-flutter-app)
+- [Common Usage Patterns](#common-usage-patterns)
+- [Model Path Configuration Guide](#model-path-configuration-guide)
+- [Model Path Resolution](#model-path-resolution)
+- [Android Auto Build](#android-auto-build)
+- [iOS Auto Prepare](#ios-auto-prepare)
+- [macOS Auto Prepare](#macos-auto-prepare)
+- [Linux Auto Prepare](#linux-auto-prepare)
+- [Windows Auto Prepare](#windows-auto-prepare)
+- [Common Issues](#common-issues)
+- [License](#license)
 
 ## Package Name
 
