@@ -7,6 +7,31 @@ Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 Package name in `pubspec.yaml` is `flutter_kiwi_nlp`.
 Use `flutter_kiwi_nlp` for dependency and import statements.
 
+## AI Integration Guide
+
+If you use an AI coding assistant for this plugin, start here:
+
+- LLM index: [`llms.txt`](llms.txt)
+- Repository skill: [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
+- Skill API reference:
+  [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
+- Skill runtime/build reference:
+  [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
+- Skill verify script:
+  [`skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`](skills/flutter-kiwi-nlp/scripts/verify_plugin.sh)
+
+For Codex, invoke the skill explicitly in your prompt:
+
+```text
+Use $flutter-kiwi-nlp to implement and validate this change.
+```
+
+Then run:
+
+```bash
+./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh
+```
+
 ## Supported Platforms
 
 | Platform | Status | Notes |
@@ -137,7 +162,7 @@ Or edit `pubspec.yaml` directly:
 
 ```yaml
 dependencies:
-  flutter_kiwi_nlp: ^0.0.2
+  flutter_kiwi_nlp: ^0.1.0
 ```
 
 ```bash

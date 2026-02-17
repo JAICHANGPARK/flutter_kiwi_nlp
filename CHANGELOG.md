@@ -1,3 +1,14 @@
+## 0.1.0
+
+* Add `llms.txt` in repository root using `llmstxt.org`-style link sections
+  for docs, API/runtime files, build scripts, examples, and optional resources.
+* Add `skills/flutter-kiwi-nlp` repository skill package:
+  `SKILL.md`, `agents/openai.yaml`, references, and
+  `scripts/verify_plugin.sh`.
+* Add AI usage guides to `README.md`, `README.en.md`, and `README.ko.md`
+  covering `llms.txt`, skill invocation, and verification flow.
+* Bump package version to `0.1.0`.
+
 ## 0.0.2
 
 * Fix macOS prepare script for Bash 3.2 `set -u` empty-array handling.

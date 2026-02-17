@@ -7,6 +7,33 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 현재 `pubspec.yaml`의 패키지명은 `flutter_kiwi_nlp`입니다.
 의존성과 import는 `flutter_kiwi_nlp`를 사용하세요.
 
+## AI 활용 가이드
+
+이 플러그인을 AI 코딩 도우미와 함께 사용할 때는 아래 순서가
+가장 안정적입니다.
+
+- LLM 인덱스: [`llms.txt`](llms.txt)
+- 저장소 전용 스킬:
+  [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
+- 스킬 API 참조:
+  [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
+- 스킬 런타임/빌드 참조:
+  [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
+- 스킬 검증 스크립트:
+  [`skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`](skills/flutter-kiwi-nlp/scripts/verify_plugin.sh)
+
+Codex에서 스킬을 명시 호출하려면 프롬프트에 다음처럼 작성하세요.
+
+```text
+Use $flutter-kiwi-nlp to implement and validate this change.
+```
+
+변경 후 기본 검증:
+
+```bash
+./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh
+```
+
 ## 지원 플랫폼
 
 | 플랫폼 | 상태 | 비고 |
@@ -136,7 +163,7 @@ flutter pub add flutter_kiwi_nlp
 
 ```yaml
 dependencies:
-  flutter_kiwi_nlp: ^0.0.2
+  flutter_kiwi_nlp: ^0.1.0
 ```
 
 ```bash

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flutter Kiwi NLP"
+  short_description: "Maintain and validate flutter_kiwi_nlp plugin"
+  default_prompt: "Use $flutter-kiwi-nlp to modify, validate, and troubleshoot this plugin."

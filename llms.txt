@@ -1,0 +1,87 @@
+# flutter_kiwi_nlp
+
+> Flutter plugin for Korean morphological analysis powered by Kiwi, with a
+> unified `KiwiAnalyzer` API across native FFI (Android, iOS, macOS, Linux,
+> Windows) and web WASM.
+
+This repository is a package, not an application.
+When making changes, preserve API parity between native and web backends.
+
+Model initialization can be zero-config with bundled assets, but platform build
+steps and model path resolution rules are important for reliable integration.
+
+## Docs
+
+- [README](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/README.md):
+  Entry page with language-specific documentation links.
+- [README (English)](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/README.en.md):
+  Full install, API, model-path, and troubleshooting guide.
+- [README (Korean)](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/README.ko.md):
+  Korean guide for installation and usage.
+- [CHANGELOG](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/CHANGELOG.md):
+  Version history and behavioral changes.
+
+## API and Runtime
+
+- [Public export surface](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/flutter_kiwi_nlp.dart):
+  Conditional export to native, web, or unsupported stub implementations.
+- [Native analyzer](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/src/kiwi_analyzer_native.dart):
+  FFI backend, model path resolution, asset extraction, and download fallback.
+- [Web analyzer](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/src/kiwi_analyzer_web.dart):
+  WASM backend and web model loading fallback logic.
+- [Analyzer options](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/src/kiwi_options.dart):
+  Build and match option flags plus `KiwiAnalyzeOptions`.
+- [Typed results](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/src/kiwi_types.dart):
+  `KiwiAnalyzeResult`, `KiwiCandidate`, and `KiwiToken` models.
+- [Exception type](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/src/kiwi_exception.dart):
+  `KiwiException` error container.
+
+## Build and Native Integration
+
+- [Package configuration](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/pubspec.yaml):
+  Plugin platform registration and bundled model assets.
+- [Native C API header](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/src/flutter_kiwi_ffi.h):
+  Bridge API declarations used by Dart FFI bindings.
+- [Native C API implementation](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/src/flutter_kiwi_ffi.c):
+  Bridge implementation against Kiwi C API.
+- [Android build script](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/tool/build_android_libkiwi.sh):
+  Auto-builds `libkiwi.so` for Android ABIs.
+- [iOS build script](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/tool/build_ios_kiwi_xcframework.sh):
+  Auto-builds `Kiwi.xcframework`.
+- [macOS build script](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/tool/build_macos_kiwi_dylib.sh):
+  Auto-builds `libkiwi.dylib`.
+- [Linux build script](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/tool/build_linux_libkiwi.sh):
+  Fetches prebuilt or falls back to source build for `libkiwi.so`.
+- [Windows build script](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/tool/build_windows_kiwi_dll.ps1):
+  Fetches prebuilt or falls back to source build for `kiwi.dll`.
+- [Release asset fetcher](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/tool/fetch_kiwi_release_assets.sh):
+  Downloads official Kiwi release binaries and model artifacts.
+
+## Example
+
+- [Example entry](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/example/lib/main.dart):
+  App bootstrap with global error logging hooks.
+- [Example app shell](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/example/lib/src/app.dart):
+  Main Material app structure for plugin demo.
+- [Analyzer feature page](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/example/lib/src/features/analyzer/kiwi_analyzer_page.dart):
+  End-user workflow for creating analyzer and running analysis.
+
+## Skills
+
+- [Flutter Kiwi NLP skill](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/skills/flutter-kiwi-nlp/SKILL.md):
+  Agent workflow for maintaining this plugin with native/web parity.
+- [Skill API reference](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/skills/flutter-kiwi-nlp/references/api-surface.md):
+  Public API and parity contract summary.
+- [Skill runtime/build reference](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/skills/flutter-kiwi-nlp/references/runtime-and-build.md):
+  Model resolution order and platform build hooks.
+- [Skill verify script](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/skills/flutter-kiwi-nlp/scripts/verify_plugin.sh):
+  Reusable command wrapper for analyze/test checks.
+
+## Optional
+
+- [Generated FFI bindings](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/lib/flutter_kiwi_ffi_bindings_generated.dart):
+  Auto-generated binding layer; only relevant when C APIs change.
+- [FFI generation config](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/ffigen.yaml):
+  Settings for regenerating Dart FFI bindings.
+- [Agent instructions](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/AGENTS.md):
+  Repository-specific coding rules for AI coding agents.
