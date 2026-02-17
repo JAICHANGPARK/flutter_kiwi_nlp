@@ -64,6 +64,7 @@ Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 - [Screenshots](#screenshots)
 - [Available APIs (Quick Table)](#available-apis-quick-table)
 - [Size Impact (Approx.) and `kiwipiepy` Comparison](#size-impact-approx-and-kiwipiepy-comparison)
+- [Performance Benchmark (`kiwipiepy` Comparison)](#performance-benchmark-kiwipiepy-comparison)
 - [Install](#install)
 - [Integrate Into a Flutter App](#integrate-into-a-flutter-app)
 - [Common Usage Patterns](#common-usage-patterns)
@@ -225,6 +226,60 @@ References:
 - https://pypi.org/project/kiwipiepy-model/
 - https://pypi.org/project/kiwipiepy/
 
+## Performance Benchmark (`kiwipiepy` Comparison)
+
+To compare `flutter_kiwi_nlp` against `kiwipiepy` fairly, run both with the
+same corpus, `top_n`, and warm-up/measurement counts.
+
+This repository now includes automation scripts for that workflow.
+
+1. Prepare dependencies
+
+```bash
+uv venv
+source .venv/bin/activate
+cd example
+flutter pub get
+cd ..
+uv pip install kiwipiepy
+```
+
+2. Run benchmark comparison (example: macOS)
+
+```bash
+uv run python tool/benchmark/run_compare.py --device macos
+```
+
+3. Inspect the report
+
+```bash
+cat benchmark/results/comparison.md
+```
+
+Generated files:
+
+- `benchmark/results/flutter_kiwi_benchmark.json`
+- `benchmark/results/kiwipiepy_benchmark.json`
+- `benchmark/results/comparison.md`
+
+Useful `run_compare.py` options:
+
+- `--warmup-runs` / `--measure-runs` / `--top-n`
+- `--num-threads` (Flutter side)
+- `--num-workers` (Python side)
+- `--model-path` (force the same model path on both runtimes)
+
+Example table format:
+
+| Metric | flutter_kiwi_nlp | kiwipiepy | Ratio (Flutter/Kiwi) |
+| --- | ---: | ---: | ---: |
+| Init time (ms, lower better) | 120.40 | 98.10 | 1.23x (slower) |
+| Throughput (analyses/s, higher better) | 650.20 | 702.90 | 0.93x (slower) |
+| Throughput (chars/s, higher better) | 192004.11 | 200441.00 | 0.96x (slower) |
+| Throughput (tokens/s, higher better) | 94000.00 | 101200.00 | 0.93x (slower) |
+| Avg latency (ms, lower better) | 1.54 | 1.42 | 1.08x (slower) |
+| Avg token latency (us/token, lower better) | 16.20 | 14.75 | 1.10x (slower) |
+
 ## Install
 
 ### 1) Install from pub.dev (recommended)
@@ -237,7 +292,7 @@ Or edit `pubspec.yaml` directly:
 
 ```yaml
 dependencies:
-  flutter_kiwi_nlp: ^0.1.0
+  flutter_kiwi_nlp: ^0.1.1
 ```
 
 ```bash

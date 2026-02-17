@@ -12,6 +12,7 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 - [스크린샷](#스크린샷)
 - [사용 가능한 API (요약 테이블)](#사용-가능한-api-요약-테이블)
 - [용량 영향 (대략) 및 `kiwipiepy` 비교](#용량-영향-대략-및-kiwipiepy-비교)
+- [성능 벤치마크 (`kiwipiepy` 비교)](#성능-벤치마크-kiwipiepy-비교)
 - [설치](#설치)
 - [Flutter 앱에 붙이기 (실전 예시)](#flutter-앱에-붙이기-실전-예시)
 - [자주 쓰는 사용 패턴](#자주-쓰는-사용-패턴)
@@ -174,6 +175,60 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 - https://pypi.org/project/kiwipiepy-model/
 - https://pypi.org/project/kiwipiepy/
 
+## 성능 벤치마크 (`kiwipiepy` 비교)
+
+`flutter_kiwi_nlp` 성능을 `kiwipiepy`와 공정하게 비교하려면,
+동일 코퍼스/동일 `top_n`/동일 워밍업 횟수로 측정해야 합니다.
+
+이 저장소에는 비교 자동화를 위한 스크립트가 포함되어 있습니다.
+
+1. 의존성 준비
+
+```bash
+uv venv
+source .venv/bin/activate
+cd example
+flutter pub get
+cd ..
+uv pip install kiwipiepy
+```
+
+2. 벤치마크 실행 (예: macOS)
+
+```bash
+uv run python tool/benchmark/run_compare.py --device macos
+```
+
+3. 결과 확인
+
+```bash
+cat benchmark/results/comparison.md
+```
+
+생성 파일:
+
+- `benchmark/results/flutter_kiwi_benchmark.json`
+- `benchmark/results/kiwipiepy_benchmark.json`
+- `benchmark/results/comparison.md`
+
+`run_compare.py` 옵션:
+
+- `--warmup-runs` / `--measure-runs` / `--top-n`
+- `--num-threads` (Flutter 쪽)
+- `--num-workers` (Python 쪽)
+- `--model-path` (양쪽 동일 모델 경로 강제)
+
+표기 예시:
+
+| 지표 | flutter_kiwi_nlp | kiwipiepy | 비율 (Flutter/Kiwi) |
+| --- | ---: | ---: | ---: |
+| 초기화 시간 (ms, 낮을수록 좋음) | 120.40 | 98.10 | 1.23x (slower) |
+| 처리량 (analyses/s, 높을수록 좋음) | 650.20 | 702.90 | 0.93x (slower) |
+| 처리량 (chars/s, 높을수록 좋음) | 192004.11 | 200441.00 | 0.96x (slower) |
+| 처리량 (tokens/s, 높을수록 좋음) | 94000.00 | 101200.00 | 0.93x (slower) |
+| 평균 지연 (ms, 낮을수록 좋음) | 1.54 | 1.42 | 1.08x (slower) |
+| 토큰당 지연 (us/token, 낮을수록 좋음) | 16.20 | 14.75 | 1.10x (slower) |
+
 ## 설치
 
 ### 1) pub.dev에서 설치 (권장)
@@ -186,7 +241,7 @@ flutter pub add flutter_kiwi_nlp
 
 ```yaml
 dependencies:
-  flutter_kiwi_nlp: ^0.1.0
+  flutter_kiwi_nlp: ^0.1.1
 ```
 
 ```bash

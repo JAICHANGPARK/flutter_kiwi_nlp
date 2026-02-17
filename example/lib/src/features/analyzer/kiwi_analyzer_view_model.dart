@@ -1,14 +1,69 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_kiwi_nlp/flutter_kiwi_nlp.dart';
 
 import '../../default_model_path_stub.dart'
     if (dart.library.io) '../../default_model_path_io.dart'
     if (dart.library.js_interop) '../../default_model_path_web.dart';
+import 'kiwi_benchmark_model_materializer_stub.dart'
+    if (dart.library.io) 'kiwi_benchmark_model_materializer_io.dart';
 import 'kiwi_demo_data.dart';
 import 'kiwi_result_row.dart';
+
+const String _benchmarkCorpusAssetPath = 'assets/benchmark_corpus_ko.txt';
+const String _defaultAssetModelPath = 'assets/kiwi-models/cong/base';
+const String _defaultPackageAssetModelPath =
+    'packages/flutter_kiwi_nlp/assets/kiwi-models/cong/base';
+const List<String> _benchmarkModelFileNames = <String>[
+  'combiningRule.txt',
+  'cong.mdl',
+  'default.dict',
+  'dialect.dict',
+  'extract.mdl',
+  'multi.dict',
+  'sj.morph',
+  'typo.dict',
+];
+
+class KiwiBenchmarkResult {
+  const KiwiBenchmarkResult({
+    required this.generatedAtUtc,
+    required this.nativeVersion,
+    required this.sentenceCount,
+    required this.warmupRuns,
+    required this.measureRuns,
+    required this.topN,
+    required this.initMs,
+    required this.elapsedMs,
+    required this.totalAnalyses,
+    required this.totalChars,
+    required this.totalTokens,
+  });
+
+  final DateTime generatedAtUtc;
+  final String nativeVersion;
+  final int sentenceCount;
+  final int warmupRuns;
+  final int measureRuns;
+  final int topN;
+  final double initMs;
+  final double elapsedMs;
+  final int totalAnalyses;
+  final int totalChars;
+  final int totalTokens;
+
+  double get analysesPerSec =>
+      _safeDivide(totalAnalyses, elapsedMs / Duration.millisecondsPerSecond);
+  double get charsPerSec =>
+      _safeDivide(totalChars, elapsedMs / Duration.millisecondsPerSecond);
+  double get tokensPerSec =>
+      _safeDivide(totalTokens, elapsedMs / Duration.millisecondsPerSecond);
+  double get avgLatencyMs => _safeDivide(elapsedMs, totalAnalyses);
+  double get avgTokenLatencyUs => _safeDivide(elapsedMs * 1000.0, totalTokens);
+}
 
 class KiwiAnalyzerViewModel extends ChangeNotifier {
   static const List<String> userWordTagOptions = <String>[
@@ -138,21 +193,7 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
       _analyzer = null;
       await current?.close();
 
-      final String modelPath = modelPathController.text.trim();
-      final bool useAssetModel = modelPath.startsWith('assets/');
-      final Future<KiwiAnalyzer> createFuture = KiwiAnalyzer.create(
-        modelPath: modelPath.isEmpty || useAssetModel ? null : modelPath,
-        assetModelPath: useAssetModel ? modelPath : null,
-      );
-      final KiwiAnalyzer created = await createFuture.timeout(
-        kIsWeb ? const Duration(minutes: 8) : const Duration(minutes: 2),
-        onTimeout: () => throw KiwiException(
-          kIsWeb
-              ? '초기화가 8분 동안 완료되지 않았습니다. 웹 디버그 모드에서는 첫 로딩이 오래 걸릴 수 있습니다. '
-                    '모델 경로/네트워크를 확인한 뒤 다시 시도하세요.'
-              : '초기화가 2분 동안 완료되지 않았습니다. 네트워크/모델 경로를 확인 후 다시 시도하세요.',
-        ),
-      );
+      final KiwiAnalyzer created = await _createAnalyzerFromModelPath();
       _analyzer = created;
       notifyListeners();
     } catch (error, stackTrace) {
@@ -240,6 +281,61 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
       notifyListeners();
     } catch (error, stackTrace) {
       _reportError('addUserWord', error, stackTrace);
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<KiwiBenchmarkResult> runBenchmark({
+    int warmupRuns = 3,
+    int measureRuns = 15,
+    int? topN,
+  }) async {
+    if (_loading) {
+      throw const KiwiException('다른 작업이 진행 중입니다. 현재 작업이 끝난 뒤 다시 시도하세요.');
+    }
+
+    final int resolvedWarmupRuns = warmupRuns < 0 ? 0 : warmupRuns;
+    final int resolvedMeasureRuns = measureRuns < 1 ? 1 : measureRuns;
+    final int resolvedTopN = (topN ?? _topN) < 1 ? 1 : (topN ?? _topN);
+    final int matchOptions = _buildMatchOptions();
+
+    _setLoading(true, clearError: true);
+    try {
+      final List<String> sentences = await _loadBenchmarkSentences();
+      final String benchmarkModelPath = await _resolveBenchmarkModelPath();
+      final Map<String, Object> payload = <String, Object>{
+        'sentences': sentences,
+        'modelPath': benchmarkModelPath,
+        'warmupRuns': resolvedWarmupRuns,
+        'measureRuns': resolvedMeasureRuns,
+        'topN': resolvedTopN,
+        'matchOptions': matchOptions,
+      };
+      final Map<String, Object?> rawResult = kIsWeb
+          ? await _runBenchmarkInBackground(payload)
+          : await compute<Map<String, Object>, Map<String, Object?>>(
+              _runBenchmarkInBackground,
+              payload,
+              debugLabel: 'kiwi-benchmark',
+            );
+
+      return KiwiBenchmarkResult(
+        generatedAtUtc: DateTime.now().toUtc(),
+        nativeVersion: '${rawResult['nativeVersion'] ?? 'unknown'}',
+        sentenceCount: _toInt(rawResult['sentenceCount']),
+        warmupRuns: _toInt(rawResult['warmupRuns']),
+        measureRuns: _toInt(rawResult['measureRuns']),
+        topN: _toInt(rawResult['topN']),
+        initMs: _toDouble(rawResult['initMs']),
+        elapsedMs: _toDouble(rawResult['elapsedMs']),
+        totalAnalyses: _toInt(rawResult['totalAnalyses']),
+        totalChars: _toInt(rawResult['totalChars']),
+        totalTokens: _toInt(rawResult['totalTokens']),
+      );
+    } catch (error, stackTrace) {
+      _reportError('benchmark', error, stackTrace);
+      rethrow;
     } finally {
       _setLoading(false);
     }
@@ -344,6 +440,113 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
     return match;
   }
 
+  Future<KiwiAnalyzer> _createAnalyzerFromModelPath() async {
+    final String modelPath = modelPathController.text.trim();
+    final bool useAssetModel = modelPath.startsWith('assets/');
+    final Future<KiwiAnalyzer> createFuture = KiwiAnalyzer.create(
+      modelPath: modelPath.isEmpty || useAssetModel ? null : modelPath,
+      assetModelPath: useAssetModel ? modelPath : null,
+    );
+    return createFuture.timeout(
+      kIsWeb ? const Duration(minutes: 8) : const Duration(minutes: 2),
+      onTimeout: () => throw KiwiException(
+        kIsWeb
+            ? '초기화가 8분 동안 완료되지 않았습니다. 웹 디버그 모드에서는 첫 로딩이 오래 걸릴 수 있습니다. '
+                  '모델 경로/네트워크를 확인한 뒤 다시 시도하세요.'
+            : '초기화가 2분 동안 완료되지 않았습니다. 네트워크/모델 경로를 확인 후 다시 시도하세요.',
+      ),
+    );
+  }
+
+  Future<List<String>> _loadBenchmarkSentences() async {
+    try {
+      final String raw = await rootBundle.loadString(_benchmarkCorpusAssetPath);
+      final List<String> sentences = _splitNonEmptyLines(raw);
+      if (sentences.isNotEmpty) {
+        return sentences;
+      }
+    } on FlutterError {
+      // Falls back to current input lines when benchmark corpus asset is absent.
+    }
+
+    final List<String> fallback = _splitNonEmptyLines(inputController.text);
+    if (fallback.isNotEmpty) {
+      return fallback;
+    }
+    throw const KiwiException(
+      '벤치마크 코퍼스가 비어 있습니다. '
+      'assets/benchmark_corpus_ko.txt 또는 입력 텍스트를 확인하세요.',
+    );
+  }
+
+  Future<String> _resolveBenchmarkModelPath() async {
+    final String configuredModelPath = modelPathController.text.trim();
+    final bool assetPath = configuredModelPath.startsWith('assets/');
+    final bool packageAssetPath = configuredModelPath.startsWith('packages/');
+    if (configuredModelPath.isNotEmpty && !assetPath) {
+      return configuredModelPath;
+    }
+
+    final List<String> candidates = _buildBenchmarkAssetPathCandidates(
+      configuredModelPath: configuredModelPath,
+      assetPath: assetPath,
+      packageAssetPath: packageAssetPath,
+    );
+    Object? lastError;
+    for (final String candidate in candidates) {
+      try {
+        final String? materializedPath =
+            await materializeBenchmarkModelDirectory(
+              candidate,
+              _benchmarkModelFileNames,
+            );
+        if (materializedPath != null && materializedPath.isNotEmpty) {
+          return materializedPath;
+        }
+      } on FlutterError catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (kIsWeb) {
+      return candidates.first;
+    }
+
+    throw KiwiException(
+      '모델 에셋 복사에 실패했습니다. '
+      '시도 경로: ${candidates.join(', ')}. '
+      '설정에서 모델 경로를 직접 지정하거나 에셋 번들을 확인하세요. '
+      '${lastError == null ? '' : '($lastError)'}',
+    );
+  }
+
+  List<String> _buildBenchmarkAssetPathCandidates({
+    required String configuredModelPath,
+    required bool assetPath,
+    required bool packageAssetPath,
+  }) {
+    if (assetPath && configuredModelPath.isNotEmpty) {
+      return <String>[
+        configuredModelPath,
+        'packages/flutter_kiwi_nlp/$configuredModelPath',
+      ];
+    }
+
+    if (packageAssetPath && configuredModelPath.isNotEmpty) {
+      return <String>[configuredModelPath];
+    }
+
+    return <String>[_defaultPackageAssetModelPath, _defaultAssetModelPath];
+  }
+
+  List<String> _splitNonEmptyLines(String text) {
+    return text
+        .split('\n')
+        .map((String value) => value.trim())
+        .where((String value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
   void _reportError(String context, Object error, [StackTrace? stackTrace]) {
     final String message = error.toString();
     final String logPrefix = '[KiwiDemo][$context]';
@@ -367,4 +570,120 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
     change();
     notifyListeners();
   }
+}
+
+Future<Map<String, Object?>> _runBenchmarkInBackground(
+  Map<String, Object> payload,
+) async {
+  final List<String> sentences = (payload['sentences'] as List<Object?>)
+      .map((Object? item) => item.toString())
+      .toList(growable: false);
+  final String modelPath = payload['modelPath'] as String;
+  final int warmupRuns = _toInt(payload['warmupRuns']);
+  final int measureRuns = _toInt(payload['measureRuns']);
+  final int topN = _toInt(payload['topN']);
+  final int matchOptions = _toInt(payload['matchOptions']);
+
+  final Stopwatch initStopwatch = Stopwatch()..start();
+  final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+    modelPath: modelPath,
+    matchOptions: matchOptions,
+  );
+  initStopwatch.stop();
+
+  try {
+    final KiwiAnalyzeOptions options = KiwiAnalyzeOptions(
+      topN: topN,
+      matchOptions: matchOptions,
+    );
+
+    await _runBenchmarkPassInBackground(
+      analyzer: analyzer,
+      sentences: sentences,
+      runs: warmupRuns,
+      options: options,
+    );
+    final Map<String, num> measured = await _runBenchmarkPassInBackground(
+      analyzer: analyzer,
+      sentences: sentences,
+      runs: measureRuns,
+      options: options,
+    );
+
+    return <String, Object?>{
+      'nativeVersion': analyzer.nativeVersion,
+      'sentenceCount': sentences.length,
+      'warmupRuns': warmupRuns,
+      'measureRuns': measureRuns,
+      'topN': topN,
+      'initMs': initStopwatch.elapsedMicroseconds / 1000.0,
+      'elapsedMs': measured['elapsedMs'] ?? 0.0,
+      'totalAnalyses': measured['totalAnalyses'] ?? 0,
+      'totalChars': measured['totalChars'] ?? 0,
+      'totalTokens': measured['totalTokens'] ?? 0,
+    };
+  } finally {
+    await analyzer.close();
+  }
+}
+
+Future<Map<String, num>> _runBenchmarkPassInBackground({
+  required KiwiAnalyzer analyzer,
+  required List<String> sentences,
+  required int runs,
+  required KiwiAnalyzeOptions options,
+}) async {
+  int totalAnalyses = 0;
+  int totalChars = 0;
+  int totalTokens = 0;
+
+  final Stopwatch stopwatch = Stopwatch()..start();
+  for (int pass = 0; pass < runs; pass += 1) {
+    for (final String sentence in sentences) {
+      final KiwiAnalyzeResult result = await analyzer.analyze(
+        sentence,
+        options: options,
+      );
+      totalAnalyses += 1;
+      totalChars += sentence.runes.length;
+      totalTokens += result.candidates.isEmpty
+          ? 0
+          : result.candidates.first.tokens.length;
+    }
+  }
+  stopwatch.stop();
+
+  return <String, num>{
+    'elapsedMs': stopwatch.elapsedMicroseconds / 1000.0,
+    'totalAnalyses': totalAnalyses,
+    'totalChars': totalChars,
+    'totalTokens': totalTokens,
+  };
+}
+
+double _safeDivide(num numerator, num denominator) {
+  if (denominator <= 0) {
+    return 0;
+  }
+  return numerator / denominator;
+}
+
+int _toInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return 0;
+}
+
+double _toDouble(Object? value) {
+  if (value is double) {
+    return value;
+  }
+  if (value is num) {
+    return value.toDouble();
+  }
+  return 0;
 }

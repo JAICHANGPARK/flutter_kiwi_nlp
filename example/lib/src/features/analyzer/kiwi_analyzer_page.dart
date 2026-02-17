@@ -166,6 +166,89 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
     ).showSnackBar(const SnackBar(content: Text('분석 결과를 클립보드에 복사했습니다.')));
   }
 
+  Future<void> _runBenchmarkFromAppBar() async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('벤치마크 실행 중입니다. 잠시만 기다려 주세요.'),
+        duration: Duration(minutes: 10),
+      ),
+    );
+
+    try {
+      final KiwiBenchmarkResult result = await _viewModel.runBenchmark();
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      await _showBenchmarkResultDialog(result);
+    } catch (error) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text('벤치마크 실패: $error')));
+    }
+  }
+
+  Future<void> _showBenchmarkResultDialog(KiwiBenchmarkResult result) async {
+    final String summary = _formatBenchmarkResult(result);
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('벤치마크 결과'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: SelectionArea(
+                child: Text(
+                  summary,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: summary));
+                if (!mounted) return;
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('벤치마크 결과를 복사했습니다.')),
+                );
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('복사'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('닫기'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatBenchmarkResult(KiwiBenchmarkResult result) {
+    final StringBuffer buffer = StringBuffer()
+      ..writeln('실행 시각(UTC): ${result.generatedAtUtc.toIso8601String()}')
+      ..writeln('Native 버전: ${result.nativeVersion}')
+      ..writeln('문장 수: ${result.sentenceCount}')
+      ..writeln('워밍업/측정: ${result.warmupRuns} / ${result.measureRuns} 회')
+      ..writeln('topN: ${result.topN}')
+      ..writeln('초기화 시간: ${result.initMs.toStringAsFixed(2)} ms')
+      ..writeln('총 측정 시간: ${result.elapsedMs.toStringAsFixed(2)} ms')
+      ..writeln('총 분석 건수: ${result.totalAnalyses}')
+      ..writeln('총 문자 수: ${result.totalChars}')
+      ..writeln('총 토큰 수: ${result.totalTokens}')
+      ..writeln('처리량(analyses/s): ${result.analysesPerSec.toStringAsFixed(2)}')
+      ..writeln('처리량(chars/s): ${result.charsPerSec.toStringAsFixed(2)}')
+      ..writeln('처리량(tokens/s): ${result.tokensPerSec.toStringAsFixed(2)}')
+      ..writeln('평균 지연(ms): ${result.avgLatencyMs.toStringAsFixed(4)}')
+      ..writeln(
+        '토큰당 지연(us/token): ${result.avgTokenLatencyUs.toStringAsFixed(4)}',
+      );
+    return buffer.toString().trimRight();
+  }
+
   bool _isCompactWidth(double width) => width < _compactBreakpoint;
 
   void _showInputTab() {
@@ -216,6 +299,11 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
                 tooltip: '설정',
                 onPressed: _openSettingsSheet,
                 icon: const Icon(Icons.settings_outlined),
+              ),
+              IconButton(
+                tooltip: '벤치마크',
+                onPressed: vm.loading ? null : _runBenchmarkFromAppBar,
+                icon: const Icon(Icons.speed_outlined),
               ),
               IconButton(
                 tooltip: '품사 사전',

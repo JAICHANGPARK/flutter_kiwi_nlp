@@ -1,3 +1,19 @@
+## 0.1.1
+
+* Add cross-runtime benchmark tooling for `flutter_kiwi_nlp` vs `kiwipiepy`:
+  `tool/benchmark/run_compare.py`,
+  `tool/benchmark/kiwipiepy_benchmark.py`, and
+  `tool/benchmark/compare_results.py`.
+* Add benchmark runner entrypoint and corpus in example app:
+  `example/lib/benchmark_main.dart` and
+  `example/assets/benchmark_corpus_ko.txt`.
+* Add in-app benchmark flow in example analyzer UI/ViewModel, including model
+  asset materialization helpers for local benchmark runs.
+* Expand docs (`README.md`, `README.en.md`, `README.ko.md`) with benchmark
+  guide, generated artifacts, and usage options.
+* Add Medium-style deep-dive docs in `doc/` (Korean and English).
+* Bump package version to `0.1.1`.
+
 ## 0.1.0
 
 * Add `llms.txt` in repository root using `llmstxt.org`-style link sections
