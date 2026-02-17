@@ -34,10 +34,38 @@
 
 ---
 
+## 왜 이 플러그인을 만들었는가
+
+처음 이 플러그인을 만든 이유는 단순했습니다.
+"Flutter 앱에서 한국어 형태소 분석을 쓰고 싶은데, 실무에서 바로 쓸 수 있는
+경로가 생각보다 불편하다"는 문제를 줄이고 싶었습니다.
+온디바이스 AI 구현에 필요한 한국어 형태소 분석기가 필요했습니다.
+그리고 더 직접적인 이유도 있었습니다.
+플러터로 Kiwi 한국어 형태소 분석기를 활용할 수 있는 패키지가 사실상 없었습니다.
+그래서 전 플랫폼 지원이 가능한 플러그인 개발을 하기로 했습니다.
+
+현장에서 반복해서 마주친 불편은 아래와 같았습니다.
+
+- Python 생태계 중심 예제가 많아 Flutter 앱에 직접 이식하기 어렵다.
+- Android/iOS/desktop/web을 같이 지원하려면 플랫폼별 구현 부담이 급격히 커진다.
+- 모델 파일 경로/배포/초기화 실패 같은 운영 이슈가 개발 속도를 크게 낮춘다.
+- 팀마다 분석 옵션/사전 관리 방식이 달라 재현 가능한 검증 체계를 만들기 어렵다.
+
+그래서 목표를 이렇게 잡았습니다.
+
+1. 앱 개발자가 `KiwiAnalyzer.create()`만 호출해도 동작하는 기본 경로 제공
+2. 네이티브와 웹에서 동일 API 유지
+3. 모델 경로/다운로드/에셋 fallback까지 포함한 운영 친화적 설계
+4. 성능 비교를 "감"이 아니라 데이터로 말할 수 있게 벤치마크 자동화
+
+---
+
 ## AI 사용자 활용 가이드 (LLM + Skills)
 
 이 프로젝트는 AI 코딩 도우미와 함께 사용할 때 생산성이 크게 올라갑니다.
 핵심은 모델에게 "레포 구조 + 스킬 + 검증 루틴"을 함께 주는 것입니다.
+현 시점 AI 활용 사용자들을 위해 패키지를 용이하게 활용할 수 있도록
+`skills`를 만들어 제공했습니다.
 
 권장 레퍼런스:
 
@@ -47,6 +75,64 @@
 - 런타임/빌드 참조:
   `skills/flutter-kiwi-nlp/references/runtime-and-build.md`
 - 검증 스크립트: `skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`
+
+### 이 워크스페이스 Skills 사용법
+
+이 워크스페이스에서는 아래 순서로 쓰는 것이 가장 안정적입니다.
+
+1. 프롬프트 첫 줄에서 스킬을 명시 호출
+2. 목표(무엇을 바꿀지)와 제약(무엇은 깨지면 안 되는지)을 함께 전달
+3. 검증 범위(analyze/test/benchmark)를 명시
+4. 결과 보고 형식(수정 파일, 핵심 diff, 검증 결과)을 지정
+
+가장 기본 호출 패턴:
+
+```text
+Use $flutter-kiwi-nlp to implement and validate this change.
+```
+
+기능 추가 요청 템플릿:
+
+```text
+Use $flutter-kiwi-nlp to implement and validate this change.
+
+Task:
+- Add [feature name] to the plugin/example app.
+- Keep native/web API parity.
+
+Constraints:
+- Do not break existing benchmark scripts under tool/benchmark.
+- Keep public API backward compatible unless explicitly noted.
+
+Validation:
+- Run flutter analyze (root + example).
+- Run example tests.
+- Run ./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh.
+```
+
+문서/벤치마크 갱신 요청 템플릿:
+
+```text
+Use $flutter-kiwi-nlp to update docs and benchmark artifacts.
+
+Task:
+- Re-run benchmark comparison and refresh markdown/json outputs.
+- Update README sections that reference benchmark workflow.
+
+Report:
+- List updated files.
+- Include benchmark delta summary.
+```
+
+추가 팁:
+
+- 스킬 본문은 `skills/flutter-kiwi-nlp/SKILL.md`에 있으므로,
+  AI가 해당 파일을 먼저 읽고 작업하게 유도하면 정확도가 올라갑니다.
+- API 변경 작업은 `skills/flutter-kiwi-nlp/references/api-surface.md`를
+  근거로 하게 하면 회귀를 줄일 수 있습니다.
+- 런타임/빌드 이슈는
+  `skills/flutter-kiwi-nlp/references/runtime-and-build.md`를
+  함께 참조하게 하면 해결 속도가 빨라집니다.
 
 AI에게 바로 쓸 수 있는 프롬프트 예시:
 
@@ -70,6 +156,72 @@ Validation:
 - "어떤 파일을 근거로 판단했는지"를 반드시 보고받기
 - 기능 변경 후 벤치마크 경로(`tool/benchmark/`)까지 검증시키기
 - PR 설명에 생성된 산출물(`benchmark/results/*.json`, `comparison.md`) 첨부하기
+
+---
+
+## 개발기: 실제로 어떤 문제를 어떻게 풀었나
+
+이 글이 단순 사용법 요약으로 보이지 않도록, 실제 개발 흐름을 간단히 남깁니다.
+아래는 기능을 확장할 때 반복된 "문제 → 결정 → 결과" 패턴입니다.
+
+### 1) 시작: Flutter에서 Korean NLP를 같은 API로 쓰고 싶었다
+
+초기 버전의 핵심 과제는 API 표면을 간결하게 유지하는 것이었습니다.
+
+- `create`, `analyze`, `addUserWord`, `close`에 집중
+- 결과는 `KiwiAnalyzeResult`, `KiwiCandidate`, `KiwiToken`로 타입화
+- 지원되지 않는 플랫폼은 조용히 실패하지 않고 `KiwiException`으로 명시 처리
+
+이 선택 덕분에 앱 코드에서는 플랫폼 분기보다 도메인 로직에 집중할 수 있었습니다.
+
+### 2) 가장 컸던 난점: "모델 경로 문제"를 사용자에게 떠넘기지 않기
+
+형태소 분석기에서 실전 장애를 많이 만드는 지점이 모델 파일입니다.
+경로가 조금만 어긋나도 초기화가 실패하고, 팀마다 환경이 달라 재현이 어렵습니다.
+
+그래서 모델 로딩을 다단계 fallback으로 설계했습니다.
+
+- 명시 `modelPath`가 있으면 우선 사용
+- 번들된 에셋 경로를 자동 탐색
+- 필요하면 기본 모델을 다운로드/캐시해 재사용
+
+즉, "앱 개발자가 경로를 다 맞춰야만 동작"하는 구조를 피하고, 기본값이 동작하는
+경험을 우선했습니다.
+
+### 3) 멀티플랫폼 현실: 기능보다 배포 자동화가 먼저 막힌다
+
+실제로는 분석 로직보다 플랫폼 준비 단계에서 시간이 더 많이 들었습니다.
+
+- macOS: `pod install` 단계에서 필요한 아티팩트 준비
+- Linux/Windows: 빌드 시점에 네이티브 라이브러리 준비
+- Android: ABI별 라이브러리와 빌드 경로 정리
+- Web: WASM 모듈/모델 파일 로딩 실패 시 fallback 경로 필요
+
+이 부분은 문서화만으로 해결이 안 되기 때문에, 스크립트/빌드 훅/자동 준비
+경로를 코드로 넣어 "실패할 때 덜 아프게" 만드는 쪽으로 정리했습니다.
+
+### 4) AI 협업 관점에서의 개선
+
+패키지 기능이 늘수록 "AI가 무엇을 읽고 어떻게 검증해야 하는지"가 중요해졌습니다.
+그래서 문서뿐 아니라 스킬을 함께 제공합니다.
+
+- 레포 맥락을 빠르게 주입하는 `llms.txt`
+- 작업 절차를 표준화하는 `skills/flutter-kiwi-nlp/SKILL.md`
+- API/런타임 참조 문서와 검증 스크립트
+
+핵심은 AI 사용자가 한 번의 프롬프트로 "구현 + 검증 + 보고"까지
+일관되게 수행할 수 있게 만드는 것입니다.
+
+### 5) 성능 논의를 데이터 중심으로 바꾸기
+
+"체감상 빠르다/느리다"만으로는 협업이 어렵습니다.
+그래서 동일 코퍼스/동일 파라미터 비교를 자동화하는 벤치마크 스크립트를 추가했습니다.
+
+- Flutter 실행 결과 JSON 생성
+- `kiwipiepy` 실행 결과 JSON 생성
+- 최종 비교표 markdown 자동 생성
+
+이제 PR에서 성능 이야기를 할 때, 재현 가능한 파일을 근거로 얘기할 수 있습니다.
 
 ---
 
