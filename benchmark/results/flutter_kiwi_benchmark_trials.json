@@ -1,0 +1,26 @@
+[
+  {
+    "runtime": "flutter_kiwi_nlp",
+    "platform": "ios",
+    "generated_at_utc": "2026-02-17T14:09:07.396007Z",
+    "warmup_runs": 1,
+    "measure_runs": 2,
+    "top_n": 1,
+    "num_threads": -1,
+    "build_options": 1039,
+    "create_match_options": 8454175,
+    "analyze_match_options": 8454175,
+    "trial_id": 1,
+    "sentence_count": 40,
+    "init_ms": 1532.399,
+    "elapsed_ms": 45.23,
+    "total_analyses": 80,
+    "total_chars": 2712,
+    "total_tokens": 1288,
+    "analyses_per_sec": 1768.7375635640062,
+    "chars_per_sec": 59960.20340481981,
+    "tokens_per_sec": 28476.6747733805,
+    "avg_latency_ms": 0.565375,
+    "avg_token_latency_us": 35.11645962732919
+  }
+]

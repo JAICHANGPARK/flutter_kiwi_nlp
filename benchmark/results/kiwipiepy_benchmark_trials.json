@@ -1,0 +1,27 @@
+[
+  {
+    "runtime": "kiwipiepy",
+    "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+    "generated_at_utc": "2026-02-17T14:09:09Z",
+    "warmup_runs": 1,
+    "measure_runs": 2,
+    "top_n": 1,
+    "num_workers": -1,
+    "build_options": 1039,
+    "create_match_options": 8454175,
+    "analyze_match_options": 8454175,
+    "trial_id": 1,
+    "model_type": "cong",
+    "sentence_count": 40,
+    "init_ms": 743.2478329865262,
+    "elapsed_ms": 22.60200001182966,
+    "total_analyses": 80,
+    "total_chars": 2712,
+    "total_tokens": 1286,
+    "analyses_per_sec": 3539.5097760432177,
+    "chars_per_sec": 119989.38140786508,
+    "tokens_per_sec": 56897.619649894725,
+    "avg_latency_ms": 0.28252500014787074,
+    "avg_token_latency_us": 17.57542769193597
+  }
+]

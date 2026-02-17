@@ -9,6 +9,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import 'kiwi_exception.dart';
+import 'kiwi_model_assets.dart';
 import 'kiwi_options.dart';
 import 'kiwi_types.dart';
 
@@ -72,30 +73,58 @@ const String _defaultModelArchiveSha256 = String.fromEnvironment(
 const String _defaultAssetModelBaseUrl =
     'assets/packages/flutter_kiwi_nlp/assets/kiwi-models/cong/base';
 
-const List<String> _modelFileNames = <String>[
-  'combiningRule.txt',
-  'cong.mdl',
-  'default.dict',
-  'dialect.dict',
-  'extract.mdl',
-  'multi.dict',
-  'sj.morph',
-  'typo.dict',
-];
-const Map<String, int> _minModelFileBytes = <String, int>{
-  'combiningRule.txt': 128,
-  'cong.mdl': 10 * 1024 * 1024,
-  'default.dict': 512 * 1024,
-  'dialect.dict': 64,
-  'extract.mdl': 4 * 1024,
-  'multi.dict': 1024 * 1024,
-  'sj.morph': 1024 * 1024,
-  'typo.dict': 64,
-};
-
 Future<JSObject>? _moduleFuture;
 Future<Map<String, Uint8List>>? _webModelFilesFuture;
+String? _lastCreateModelBaseForTest;
+String? _lastCreateUrlModelBaseForTest;
+String? _lastCreateModuleUrlForTest;
+String? _lastCreateWasmUrlForTest;
 
+/// Returns the module URL resolved for this build.
+String debugKiwiWebModuleUrlForTest() => _defaultModuleUrl;
+
+/// Returns the WASM URL resolved for this build.
+String debugKiwiWebWasmUrlForTest() => _defaultWasmUrl;
+
+/// Returns the default packaged model base URL used on web.
+String debugKiwiWebDefaultAssetModelBaseUrlForTest() {
+  return _defaultAssetModelBaseUrl;
+}
+
+/// Resolves the model URL base with the same rules used by create.
+String debugKiwiWebResolveModelUrlBaseForTest({
+  String? modelPath,
+  String? assetModelPath,
+}) {
+  final String modelBase = normalizeKiwiModelBasePath(
+    modelPath ?? assetModelPath ?? _defaultModelBaseUrl,
+  );
+  return normalizeKiwiModelUrlBase(
+    modelBase.isNotEmpty ? modelBase : _defaultAssetModelBaseUrl,
+  );
+}
+
+/// Returns the last model base resolved by [KiwiAnalyzer.create].
+String? debugKiwiWebLastCreateModelBaseForTest() {
+  return _lastCreateModelBaseForTest;
+}
+
+/// Returns the last normalized model URL base resolved by create.
+String? debugKiwiWebLastCreateUrlModelBaseForTest() {
+  return _lastCreateUrlModelBaseForTest;
+}
+
+/// Returns the last module URL used by [KiwiAnalyzer.create].
+String? debugKiwiWebLastCreateModuleUrlForTest() {
+  return _lastCreateModuleUrlForTest;
+}
+
+/// Returns the last WASM URL used by [KiwiAnalyzer.create].
+String? debugKiwiWebLastCreateWasmUrlForTest() {
+  return _lastCreateWasmUrlForTest;
+}
+
+/// Web (WASM) Kiwi analyzer for Korean morphological analysis.
 class KiwiAnalyzer {
   final JSObject _builder;
   JSObject? _kiwi;
@@ -115,6 +144,16 @@ class KiwiAnalyzer {
     this._version,
   );
 
+  /// Creates a web analyzer instance.
+  ///
+  /// The [modelPath] or [assetModelPath] should point to a model base URL.
+  /// If omitted, this method uses compile-time defaults and package assets.
+  /// The [buildOptions] value uses [KiwiBuildOption] flags supported by the
+  /// web backend.
+  /// The [numThreads] and [matchOptions] values are accepted for API parity
+  /// with native platforms but are not applied on web create.
+  ///
+  /// Throws a [KiwiException] if the module or model cannot be loaded.
   static Future<KiwiAnalyzer> create({
     String? modelPath,
     String? assetModelPath,
@@ -122,14 +161,18 @@ class KiwiAnalyzer {
     int buildOptions = KiwiBuildOption.defaultOption,
     int matchOptions = KiwiMatchOption.allWithNormalizing,
   }) async {
-    final String modelBase = _normalizeModelBasePath(
+    final String modelBase = normalizeKiwiModelBasePath(
       modelPath ?? assetModelPath ?? _defaultModelBaseUrl,
     );
-    final String urlModelBase = _normalizeModelUrlBase(
+    final String urlModelBase = normalizeKiwiModelUrlBase(
       modelBase.isNotEmpty ? modelBase : _defaultAssetModelBaseUrl,
     );
+    _lastCreateModelBaseForTest = modelBase;
+    _lastCreateUrlModelBaseForTest = urlModelBase;
+    _lastCreateModuleUrlForTest = _defaultModuleUrl;
+    _lastCreateWasmUrlForTest = _defaultWasmUrl;
     _webLog('create modelBase="$modelBase" urlModelBase="$urlModelBase"');
-    Map<String, Object?> buildModelFiles = _buildModelFiles(urlModelBase);
+    Map<String, Object?> buildModelFiles = buildKiwiModelFiles(urlModelBase);
 
     final JSObject kiwiModule = await _loadKiwiModule();
     final JSAny? kiwiBuilderType = kiwiModule['KiwiBuilder'];
@@ -177,7 +220,7 @@ class KiwiAnalyzer {
       built = await _buildKiwi(builder, buildArgs);
     } on KiwiException catch (firstError) {
       _webLog('initial build failed: ${firstError.message}');
-      if (modelBase.isNotEmpty && !_shouldTryArchiveFallback(modelBase)) {
+      if (modelBase.isNotEmpty && !shouldTryKiwiArchiveFallback(modelBase)) {
         rethrow;
       }
       // Fallback: if URL-based model loading fails, try in-memory archive load.
@@ -211,8 +254,14 @@ class KiwiAnalyzer {
     );
   }
 
+  /// The backend version string reported by the web runtime.
   String get nativeVersion => 'web/wasm $_version';
 
+  /// Analyzes [text] and returns candidate tokenization results.
+  ///
+  /// The [options] control candidate count and matching behavior.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
   Future<KiwiAnalyzeResult> analyze(
     String text, {
     KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
@@ -270,6 +319,12 @@ class KiwiAnalyzer {
     return KiwiAnalyzeResult(candidates: candidates);
   }
 
+  /// Adds a user dictionary entry to this analyzer instance.
+  ///
+  /// The [word] is the surface form to register.
+  /// The [tag] is a POS tag string and [score] adjusts dictionary confidence.
+  ///
+  /// Throws a [KiwiException] if this analyzer is closed or [word] is empty.
   Future<void> addUserWord(
     String word, {
     String tag = 'NNP',
@@ -292,6 +347,9 @@ class KiwiAnalyzer {
     _kiwiId = rebuilt.kiwiId;
   }
 
+  /// Releases web-side state for this analyzer.
+  ///
+  /// After calling this method, subsequent API calls throw a [KiwiException].
   Future<void> close() async {
     _closed = true;
     _kiwi = null;
@@ -436,39 +494,6 @@ class _BuiltKiwi {
   final int? kiwiId;
 
   const _BuiltKiwi({this.kiwi, this.api, this.kiwiId});
-}
-
-Map<String, Object?> _buildModelFiles(String base) {
-  return <String, Object?>{
-    for (final String fileName in _modelFileNames) fileName: '$base/$fileName',
-  };
-}
-
-String _normalizeModelBasePath(String? modelPath) {
-  final String raw = modelPath?.trim() ?? '';
-  if (raw.isEmpty) return '';
-  if (raw.endsWith('/')) {
-    return raw.substring(0, raw.length - 1);
-  }
-  return raw;
-}
-
-String _normalizeModelUrlBase(String base) {
-  final String normalized = _normalizeModelBasePath(base);
-  if (normalized.startsWith('packages/')) {
-    return 'assets/$normalized';
-  }
-  if (normalized.startsWith('/packages/')) {
-    return 'assets$normalized';
-  }
-  return normalized;
-}
-
-bool _shouldTryArchiveFallback(String modelBase) {
-  final String normalized = _normalizeModelBasePath(modelBase);
-  return normalized.startsWith('assets/') ||
-      normalized.startsWith('packages/') ||
-      normalized.startsWith('/packages/');
 }
 
 Map<String, Object?> _asObjectMap(Map<String, Uint8List> files) {
@@ -623,7 +648,7 @@ Future<Uint8List> _downloadArchiveFromGithubApi() async {
         )
         .timeout(const Duration(seconds: 45));
     if (response.statusCode == 200 &&
-        !_isJsonContentType(response.headers['content-type'])) {
+        !isJsonContentType(response.headers['content-type'])) {
       return response.bodyBytes;
     }
   }
@@ -634,15 +659,6 @@ Future<Uint8List> _downloadArchiveFromGithubApi() async {
     throw const KiwiException('Asset URL missing in GitHub release metadata.');
   }
   return _downloadBinaryFromUrl(browserDownloadUrl);
-}
-
-bool _isJsonContentType(String? contentType) {
-  if (contentType == null) {
-    return false;
-  }
-  final String normalized = contentType.toLowerCase();
-  return normalized.contains('application/json') ||
-      normalized.contains('+json');
 }
 
 void _verifyWebModelArchiveChecksum(Uint8List bytes) {
@@ -667,8 +683,8 @@ Map<String, Uint8List> _extractModelFilesFromArchive(Uint8List archiveBytes) {
     if (!entry.isFile) {
       continue;
     }
-    final String baseName = _baseName(entry.name);
-    if (!_modelFileNames.contains(baseName)) {
+    final String baseName = kiwiBaseName(entry.name);
+    if (!kiwiModelFileNames.contains(baseName)) {
       continue;
     }
     final Object content = entry.content;
@@ -682,28 +698,12 @@ Map<String, Uint8List> _extractModelFilesFromArchive(Uint8List archiveBytes) {
 }
 
 void _validateWebModelFiles(Map<String, Uint8List> files) {
-  final List<String> missing = <String>[];
-  for (final String fileName in _modelFileNames) {
-    final Uint8List? data = files[fileName];
-    final int minBytes = _minModelFileBytes[fileName] ?? 1;
-    if (data == null || data.lengthInBytes < minBytes) {
-      missing.add(fileName);
-    }
-  }
+  final List<String> missing = findMissingKiwiModelFiles(files);
   if (missing.isNotEmpty) {
     throw KiwiException(
       'Downloaded default web model is incomplete. Missing files: ${missing.join(', ')}',
     );
   }
-}
-
-String _baseName(String path) {
-  final String normalized = path.replaceAll('\\', '/');
-  final int index = normalized.lastIndexOf('/');
-  if (index == -1) {
-    return normalized;
-  }
-  return normalized.substring(index + 1);
 }
 
 Future<JSObject> _loadKiwiModuleImpl() async {

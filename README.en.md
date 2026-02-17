@@ -5,6 +5,7 @@ Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 ## Table of Contents
 
 - [Package Name](#package-name)
+- [Technical Report](#technical-report)
 - [AI Integration Guide](#ai-integration-guide)
 - [Supported Platforms](#supported-platforms)
 - [Unsupported Platforms](#unsupported-platforms)
@@ -30,6 +31,12 @@ Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 
 Package name in `pubspec.yaml` is `flutter_kiwi_nlp`.
 Use `flutter_kiwi_nlp` for dependency and import statements.
+
+## Technical Report
+
+- PDF: [`doc/technical_report_arxiv.pdf`](doc/technical_report_arxiv.pdf)
+- arXiv-style LaTeX source:
+  [`doc/technical_report_arxiv.tex`](doc/technical_report_arxiv.tex)
 
 ## AI Integration Guide
 
@@ -155,7 +162,7 @@ As of `2026-02-17`:
 | Item | Basis | Size (Approx.) | Notes |
 | --- | --- | --- | --- |
 | `flutter_kiwi_nlp` default model | Uncompressed model directory (`assets/kiwi-models/cong/base`) | `95MB` | Actual model file set that may be bundled as app assets |
-| `flutter_kiwi_nlp` default model (tgz) | Same directory compressed locally (`/tmp/flutter_kiwi_model_base.tgz`) | `76MB` | Local compressed-size reference for fair comparison |
+| `flutter_kiwi_nlp` default model (tgz) | Same directory compressed locally (`./tmp/flutter_kiwi_model_base.tgz`) | `76MB` | Local compressed-size reference for fair comparison |
 | `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5MB` | Published compressed package size on PyPI |
 | Android `libkiwi.so` (reference) | Workspace build outputs in this repo | `159MB (arm64-v8a)`, `191MB (x86_64)` | Current binaries are `with debug_info`, `not stripped` |
 
@@ -196,6 +203,18 @@ uv pip install kiwipiepy
 
 ```bash
 uv run python tool/benchmark/run_compare.py --device macos
+
+# Paper-style repeated trials with explicit parity options.
+uv run python tool/benchmark/run_compare.py \
+  --device macos \
+  --trials 5 \
+  --warmup-runs 3 \
+  --measure-runs 15 \
+  --num-threads -1 \
+  --num-workers -1 \
+  --build-options 1039 \
+  --create-match-options 8454175 \
+  --analyze-match-options 8454175
 ```
 
 3. Inspect the report
@@ -206,27 +225,35 @@ cat benchmark/results/comparison.md
 
 Generated files:
 
-- `benchmark/results/flutter_kiwi_benchmark.json`
-- `benchmark/results/kiwipiepy_benchmark.json`
+- `benchmark/results/flutter_kiwi_benchmark_trials.json`
+- `benchmark/results/kiwipiepy_benchmark_trials.json`
+- `benchmark/results/flutter_kiwi_benchmark_trial_XX.json`
+- `benchmark/results/kiwipiepy_benchmark_trial_XX.json`
+- `benchmark/results/flutter_kiwi_benchmark.json` (legacy single-run compatibility: final trial)
+- `benchmark/results/kiwipiepy_benchmark.json` (legacy single-run compatibility: final trial)
 - `benchmark/results/comparison.md`
 
 Useful `run_compare.py` options:
 
+- `--trials`
 - `--warmup-runs` / `--measure-runs` / `--top-n`
 - `--num-threads` (Flutter side)
 - `--num-workers` (Python side)
+- `--build-options`
+- `--create-match-options`
+- `--analyze-match-options` (or `--match-options`)
 - `--model-path` (force the same model path on both runtimes)
 
 Example table format:
 
-| Metric | flutter_kiwi_nlp | kiwipiepy | Ratio (Flutter/Kiwi) |
+| Metric | flutter_kiwi_nlp (mean ± std) | kiwipiepy (mean ± std) | Ratio (Flutter mean / Kiwi mean) |
 | --- | ---: | ---: | ---: |
-| Init time (ms, lower better) | 120.40 | 98.10 | 1.23x (slower) |
-| Throughput (analyses/s, higher better) | 650.20 | 702.90 | 0.93x (slower) |
-| Throughput (chars/s, higher better) | 192004.11 | 200441.00 | 0.96x (slower) |
-| Throughput (tokens/s, higher better) | 94000.00 | 101200.00 | 0.93x (slower) |
-| Avg latency (ms, lower better) | 1.54 | 1.42 | 1.08x (slower) |
-| Avg token latency (us/token, lower better) | 16.20 | 14.75 | 1.10x (slower) |
+| Init time (ms, lower better) | 120.40 ± 3.20 | 98.10 ± 2.80 | 1.23x (slower) |
+| Throughput (analyses/s, higher better) | 650.20 ± 12.30 | 702.90 ± 8.10 | 0.93x (slower) |
+| Throughput (chars/s, higher better) | 192004.11 ± 4102.30 | 200441.00 ± 2310.10 | 0.96x (slower) |
+| Throughput (tokens/s, higher better) | 94000.00 ± 2011.30 | 101200.00 ± 1188.40 | 0.93x (slower) |
+| Avg latency (ms, lower better) | 1.54 ± 0.03 | 1.42 ± 0.02 | 1.08x (slower) |
+| Avg token latency (us/token, lower better) | 16.20 ± 0.25 | 14.75 ± 0.19 | 1.10x (slower) |
 
 ## Install
 
@@ -451,20 +478,20 @@ final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
 
 ```dart
 final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
-  modelPath: '/absolute/path/to/kiwi-models/cong/base',
+  modelPath: '<MODEL_DIR>/kiwi-models/cong/base',
 );
 ```
 
 You can also use environment variables on desktop/CI:
 
 ```bash
-FLUTTER_KIWI_NLP_MODEL_PATH=/absolute/path/to/model flutter run -d macos
+FLUTTER_KIWI_NLP_MODEL_PATH=<MODEL_DIR> flutter run -d macos
 ```
 
 PowerShell:
 
 ```powershell
-$env:FLUTTER_KIWI_NLP_MODEL_PATH='C:\kiwi\model\cong\base'
+$env:FLUTTER_KIWI_NLP_MODEL_PATH='<MODEL_DIR>\kiwi\model\cong\base'
 flutter run -d windows
 ```
 

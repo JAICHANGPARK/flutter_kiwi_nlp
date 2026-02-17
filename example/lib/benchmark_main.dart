@@ -33,6 +33,30 @@ const String _numThreadsDefine = String.fromEnvironment(
   'KIWI_BENCH_NUM_THREADS',
   defaultValue: '-1',
 );
+const String _buildOptionsDefine = String.fromEnvironment(
+  'KIWI_BENCH_BUILD_OPTIONS',
+  // 1039 = KiwiBuildOption.defaultOption with modelTypeCong.
+  defaultValue: '1039',
+);
+const String _createMatchOptionsDefine = String.fromEnvironment(
+  'KIWI_BENCH_CREATE_MATCH_OPTIONS',
+  defaultValue: String.fromEnvironment(
+    'KIWI_BENCH_MATCH_OPTIONS',
+    defaultValue: '8454175',
+  ),
+);
+const String _analyzeMatchOptionsDefine = String.fromEnvironment(
+  'KIWI_BENCH_ANALYZE_MATCH_OPTIONS',
+  defaultValue: String.fromEnvironment(
+    'KIWI_BENCH_MATCH_OPTIONS',
+    // 8454175 = KiwiMatchOption.allWithNormalizing.
+    defaultValue: '8454175',
+  ),
+);
+const String _trialIdDefine = String.fromEnvironment(
+  'KIWI_BENCH_TRIAL_ID',
+  defaultValue: '0',
+);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,8 +66,12 @@ Future<void> main() async {
     final _BenchmarkResult result = await _runBenchmark(config);
     final Map<String, Object> payload = result.toJson();
     final String encoded = jsonEncode(payload);
-
-    stdout.writeln('KIWI_BENCHMARK_JSON=$encoded');
+    final String marker = 'KIWI_BENCHMARK_JSON=$encoded';
+    // stdout is reliable on desktop, while print is more reliable on
+    // mobile/web device logs consumed by `flutter run`.
+    // ignore: avoid_print
+    print(marker);
+    stdout.writeln(marker);
 
     if (config.outputPath.isNotEmpty) {
       await _tryWritePayload(config.outputPath, payload);
@@ -51,7 +79,10 @@ Future<void> main() async {
 
     exit(0);
   } catch (error, stackTrace) {
-    stderr.writeln('KIWI_BENCHMARK_ERROR=$error');
+    final String marker = 'KIWI_BENCHMARK_ERROR=$error';
+    // ignore: avoid_print
+    print(marker);
+    stderr.writeln(marker);
     stderr.writeln(stackTrace);
     exitCode = 1;
     exit(1);
@@ -67,6 +98,10 @@ class _BenchmarkConfig {
     required this.measureRuns,
     required this.topN,
     required this.numThreads,
+    required this.buildOptions,
+    required this.createMatchOptions,
+    required this.analyzeMatchOptions,
+    required this.trialId,
   });
 
   final String corpusAssetPath;
@@ -76,6 +111,10 @@ class _BenchmarkConfig {
   final int measureRuns;
   final int topN;
   final int numThreads;
+  final int buildOptions;
+  final int createMatchOptions;
+  final int analyzeMatchOptions;
+  final int trialId;
 
   factory _BenchmarkConfig.fromDefines() {
     return _BenchmarkConfig(
@@ -86,6 +125,18 @@ class _BenchmarkConfig {
       measureRuns: _parseInt(_measureRunsDefine, fallback: 15, minimum: 1),
       topN: _parseInt(_topNDefine, fallback: 1, minimum: 1),
       numThreads: _parseInt(_numThreadsDefine, fallback: -1, minimum: -1),
+      buildOptions: _parseInt(_buildOptionsDefine, fallback: 1039, minimum: 0),
+      createMatchOptions: _parseInt(
+        _createMatchOptionsDefine,
+        fallback: 8454175,
+        minimum: 0,
+      ),
+      analyzeMatchOptions: _parseInt(
+        _analyzeMatchOptionsDefine,
+        fallback: 8454175,
+        minimum: 0,
+      ),
+      trialId: _parseInt(_trialIdDefine, fallback: 0, minimum: 0),
     );
   }
 }
@@ -111,6 +162,10 @@ class _BenchmarkResult {
     required this.measureRuns,
     required this.topN,
     required this.numThreads,
+    required this.buildOptions,
+    required this.createMatchOptions,
+    required this.analyzeMatchOptions,
+    required this.trialId,
     required this.sentenceCount,
     required this.initMs,
     required this.elapsedMs,
@@ -124,6 +179,10 @@ class _BenchmarkResult {
   final int measureRuns;
   final int topN;
   final int numThreads;
+  final int buildOptions;
+  final int createMatchOptions;
+  final int analyzeMatchOptions;
+  final int trialId;
   final int sentenceCount;
   final double initMs;
   final double elapsedMs;
@@ -150,6 +209,10 @@ class _BenchmarkResult {
       'measure_runs': measureRuns,
       'top_n': topN,
       'num_threads': numThreads,
+      'build_options': buildOptions,
+      'create_match_options': createMatchOptions,
+      'analyze_match_options': analyzeMatchOptions,
+      'trial_id': trialId,
       'sentence_count': sentenceCount,
       'init_ms': initMs,
       'elapsed_ms': elapsedMs,
@@ -173,7 +236,10 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
   initStopwatch.stop();
 
   try {
-    final KiwiAnalyzeOptions options = KiwiAnalyzeOptions(topN: config.topN);
+    final KiwiAnalyzeOptions options = KiwiAnalyzeOptions(
+      topN: config.topN,
+      matchOptions: config.analyzeMatchOptions,
+    );
 
     await _executeRuns(
       analyzer: analyzer,
@@ -195,6 +261,10 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       measureRuns: config.measureRuns,
       topN: config.topN,
       numThreads: config.numThreads,
+      buildOptions: config.buildOptions,
+      createMatchOptions: config.createMatchOptions,
+      analyzeMatchOptions: config.analyzeMatchOptions,
+      trialId: config.trialId,
       sentenceCount: sentences.length,
       initMs: initStopwatch.elapsedMicroseconds / 1000.0,
       elapsedMs: measured.elapsedMs,
@@ -209,12 +279,18 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
 
 Future<KiwiAnalyzer> _createAnalyzer(_BenchmarkConfig config) {
   if (config.modelPath.isEmpty) {
-    return KiwiAnalyzer.create(numThreads: config.numThreads);
+    return KiwiAnalyzer.create(
+      numThreads: config.numThreads,
+      buildOptions: config.buildOptions,
+      matchOptions: config.createMatchOptions,
+    );
   }
 
   return KiwiAnalyzer.create(
     modelPath: config.modelPath,
     numThreads: config.numThreads,
+    buildOptions: config.buildOptions,
+    matchOptions: config.createMatchOptions,
   );
 }
 

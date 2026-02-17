@@ -1,0 +1,25 @@
+{
+  "task": "gold_eval_aggregate",
+  "runtime": "kiwipiepy",
+  "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+  "dataset_name": "combined",
+  "source_datasets": [
+    "gold_eval_web_ko",
+    "gold_eval_written_ko"
+  ],
+  "sentence_count": 191,
+  "gold_token_count": 7990,
+  "predicted_token_count": 8103,
+  "init_ms_mean": 885.3252084954875,
+  "eval_elapsed_ms": 2712.006084009772,
+  "token_edit_distance": 929,
+  "token_edit_denominator": 8137,
+  "token_agreement": 0.8858301585350866,
+  "pos_edit_distance": 1176,
+  "pos_edit_denominator": 8137,
+  "pos_agreement": 0.8554749907828438,
+  "token_sequence_exact_count": 7,
+  "token_sequence_exact_match": 0.03664921465968586,
+  "sentence_exact_count": 5,
+  "sentence_exact_match": 0.02617801047120419
+}

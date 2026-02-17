@@ -174,6 +174,8 @@ class FlutterKiwiFfiBindings {
       .asFunction<ffi.Pointer<ffi.Char> Function()>();
 }
 
+/// Opaque native analyzer handle type used by the Kiwi FFI bridge.
 final class flutter_kiwi_ffi_handle extends ffi.Opaque {}
 
+/// Type alias for [flutter_kiwi_ffi_handle].
 typedef flutter_kiwi_ffi_handle_t = flutter_kiwi_ffi_handle;

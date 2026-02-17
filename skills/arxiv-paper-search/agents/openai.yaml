@@ -1,0 +1,4 @@
+interface:
+  display_name: "ArXiv Paper Search"
+  short_description: "Search latest arXiv papers by topic"
+  default_prompt: "Use $arxiv-paper-search to query arXiv and summarize papers with exact publication dates."

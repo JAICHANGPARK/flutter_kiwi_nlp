@@ -12,15 +12,190 @@ import 'package:flutter/widgets.dart';
 
 import '../flutter_kiwi_ffi_bindings_generated.dart';
 import 'kiwi_exception.dart';
+import 'kiwi_model_assets.dart';
 import 'kiwi_options.dart';
 import 'kiwi_types.dart';
 
-final DynamicLibrary _dylib = _openPluginDynamicLibrary();
+/// Native binding contract used by [KiwiAnalyzer].
+///
+/// The default implementation delegates to generated FFI bindings. Tests may
+/// provide a fake implementation through [debugSetKiwiNativeBindingsFactoryForTest].
+abstract interface class KiwiNativeBindings {
+  Pointer<flutter_kiwi_ffi_handle_t> flutter_kiwi_ffi_init(
+    Pointer<Char> modelPath,
+    int numThreads,
+    int buildOptions,
+    int matchOptions,
+  );
 
-final FlutterKiwiFfiBindings _bindings = FlutterKiwiFfiBindings(_dylib);
+  int flutter_kiwi_ffi_close(Pointer<flutter_kiwi_ffi_handle_t> handle);
+
+  Pointer<Char> flutter_kiwi_ffi_analyze_json(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> text,
+    int topN,
+    int matchOptions,
+  );
+
+  int flutter_kiwi_ffi_add_user_word(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> word,
+    Pointer<Char> tag,
+    double score,
+  );
+
+  void flutter_kiwi_ffi_free_string(Pointer<Char> value);
+
+  Pointer<Char> flutter_kiwi_ffi_last_error();
+
+  Pointer<Char> flutter_kiwi_ffi_version();
+}
+
+class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
+  final FlutterKiwiFfiBindings _bindings;
+
+  GeneratedKiwiNativeBindings(this._bindings);
+
+  @override
+  Pointer<flutter_kiwi_ffi_handle_t> flutter_kiwi_ffi_init(
+    Pointer<Char> modelPath,
+    int numThreads,
+    int buildOptions,
+    int matchOptions,
+  ) {
+    return _bindings.flutter_kiwi_ffi_init(
+      modelPath,
+      numThreads,
+      buildOptions,
+      matchOptions,
+    );
+  }
+
+  @override
+  int flutter_kiwi_ffi_close(Pointer<flutter_kiwi_ffi_handle_t> handle) {
+    return _bindings.flutter_kiwi_ffi_close(handle);
+  }
+
+  @override
+  Pointer<Char> flutter_kiwi_ffi_analyze_json(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> text,
+    int topN,
+    int matchOptions,
+  ) {
+    return _bindings.flutter_kiwi_ffi_analyze_json(
+      handle,
+      text,
+      topN,
+      matchOptions,
+    );
+  }
+
+  @override
+  int flutter_kiwi_ffi_add_user_word(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> word,
+    Pointer<Char> tag,
+    double score,
+  ) {
+    return _bindings.flutter_kiwi_ffi_add_user_word(handle, word, tag, score);
+  }
+
+  @override
+  void flutter_kiwi_ffi_free_string(Pointer<Char> value) {
+    _bindings.flutter_kiwi_ffi_free_string(value);
+  }
+
+  @override
+  Pointer<Char> flutter_kiwi_ffi_last_error() {
+    return _bindings.flutter_kiwi_ffi_last_error();
+  }
+
+  @override
+  Pointer<Char> flutter_kiwi_ffi_version() {
+    return _bindings.flutter_kiwi_ffi_version();
+  }
+}
+
+KiwiNativeBindings _createDefaultKiwiNativeBindings() {
+  final DynamicLibrary dynamicLibrary = _openPluginDynamicLibrary();
+  return GeneratedKiwiNativeBindings(FlutterKiwiFfiBindings(dynamicLibrary));
+}
+
+KiwiNativeBindings Function() _kiwiNativeBindingsFactory =
+    _createDefaultKiwiNativeBindings;
+String? _kiwiNativeArchiveUrlOverrideForTest;
+String? _kiwiNativeArchiveSha256OverrideForTest;
+HttpClient Function() _kiwiHttpClientFactory = HttpClient.new;
+String? _lastOpenedNativeLibraryCandidateForTest;
+
+/// Overrides native binding creation for tests.
+void debugSetKiwiNativeBindingsFactoryForTest(
+  KiwiNativeBindings Function()? factory,
+) {
+  _kiwiNativeBindingsFactory = factory ?? _createDefaultKiwiNativeBindings;
+}
+
+/// Overrides archive URL/checksum used by default model preparation in tests.
+void debugSetKiwiNativeArchiveOverridesForTest({
+  String? archiveUrl,
+  String? archiveSha256,
+}) {
+  _kiwiNativeArchiveUrlOverrideForTest = archiveUrl;
+  _kiwiNativeArchiveSha256OverrideForTest = archiveSha256;
+}
+
+/// Overrides [HttpClient] creation used by default model download in tests.
+void debugSetKiwiNativeHttpClientFactoryForTest(
+  HttpClient Function()? factory,
+) {
+  _kiwiHttpClientFactory = factory ?? HttpClient.new;
+}
+
+/// Returns native dynamic library load candidates for the current platform.
+List<String> debugKiwiNativeLibraryCandidatesForTest() {
+  return _nativeLibraryCandidatesForCurrentPlatform();
+}
+
+/// Returns the last candidate that successfully loaded in this isolate.
+String? debugKiwiNativeLoadedLibraryCandidateForTest() {
+  return _lastOpenedNativeLibraryCandidateForTest;
+}
+
+String _effectiveDefaultModelArchiveUrl() {
+  return _kiwiNativeArchiveUrlOverrideForTest ?? _defaultModelArchiveUrl;
+}
+
+String _effectiveDefaultModelArchiveSha256() {
+  return _kiwiNativeArchiveSha256OverrideForTest ?? _defaultModelArchiveSha256;
+}
 
 DynamicLibrary _openPluginDynamicLibrary() {
-  final List<String> candidates = <String>[
+  final List<String> candidates = _nativeLibraryCandidatesForCurrentPlatform();
+  if (candidates.isEmpty) {
+    throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+  }
+
+  final List<String> errors = <String>[];
+  for (final String path in candidates) {
+    try {
+      final DynamicLibrary library = DynamicLibrary.open(path);
+      _lastOpenedNativeLibraryCandidateForTest = path;
+      return library;
+    } catch (error) {
+      errors.add('$path => $error');
+    }
+  }
+
+  throw ArgumentError(
+    'Failed to load Kiwi native bridge library. '
+    'Tried: ${candidates.join(', ')}. '
+    'Errors: ${errors.join(' | ')}',
+  );
+}
+
+List<String> _nativeLibraryCandidatesForCurrentPlatform() {
+  return <String>[
     if (Platform.isMacOS || Platform.isIOS) ...<String>[
       'flutter_kiwi_nlp.framework/flutter_kiwi_nlp',
       'flutter_kiwi_ffi.framework/flutter_kiwi_ffi',
@@ -34,24 +209,6 @@ DynamicLibrary _openPluginDynamicLibrary() {
       'flutter_kiwi_nlp.dll',
     ],
   ];
-  if (candidates.isEmpty) {
-    throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
-  }
-
-  final List<String> errors = <String>[];
-  for (final String path in candidates) {
-    try {
-      return DynamicLibrary.open(path);
-    } catch (error) {
-      errors.add('$path => $error');
-    }
-  }
-
-  throw ArgumentError(
-    'Failed to load Kiwi native bridge library. '
-    'Tried: ${candidates.join(', ')}. '
-    'Errors: ${errors.join(' | ')}',
-  );
 }
 
 const String _defaultAssetModelPath = String.fromEnvironment(
@@ -91,35 +248,32 @@ const List<String> _autoAssetModelPaths = <String>[
   'packages/flutter_kiwi_ffi/assets/kiwi-models/cong/base',
 ];
 
-const List<String> _modelFileNames = <String>[
-  'combiningRule.txt',
-  'cong.mdl',
-  'default.dict',
-  'dialect.dict',
-  'extract.mdl',
-  'multi.dict',
-  'sj.morph',
-  'typo.dict',
-];
-const Map<String, int> _minModelFileBytes = <String, int>{
-  'combiningRule.txt': 128,
-  'cong.mdl': 10 * 1024 * 1024,
-  'default.dict': 512 * 1024,
-  'dialect.dict': 64,
-  'extract.mdl': 4 * 1024,
-  'multi.dict': 1024 * 1024,
-  'sj.morph': 1024 * 1024,
-  'typo.dict': 64,
-};
-
 Future<String>? _downloadedModelPathFuture;
 
+/// Native (FFI) Kiwi analyzer for Korean morphological analysis.
 class KiwiAnalyzer {
   final Pointer<flutter_kiwi_ffi_handle> _handle;
+  final KiwiNativeBindings _bindings;
   bool _closed = false;
 
-  KiwiAnalyzer._(this._handle);
+  KiwiAnalyzer._(this._handle, this._bindings);
 
+  /// Creates a native analyzer instance.
+  ///
+  /// The [modelPath] points to a local Kiwi model directory.
+  /// The [assetModelPath] points to bundled Flutter assets and is extracted to
+  /// a temporary directory.
+  /// The [numThreads] value configures Kiwi worker threads. Use `-1` for the
+  /// backend default.
+  /// The [buildOptions] value combines [KiwiBuildOption] bit flags.
+  /// The [matchOptions] value combines [KiwiMatchOption] bit flags used as the
+  /// analyzer default.
+  ///
+  /// If both paths are omitted, this method tries environment variables,
+  /// packaged default assets, and finally the default model archive download.
+  ///
+  /// Throws a [KiwiException] if the model cannot be resolved or the native
+  /// backend initialization fails.
   static Future<KiwiAnalyzer> create({
     String? modelPath,
     String? assetModelPath,
@@ -146,8 +300,9 @@ class KiwiAnalyzer {
     if ((resolvedBuildOptions & 0x0F00) == 0) {
       resolvedBuildOptions |= KiwiBuildOption.modelTypeCong;
     }
+    final KiwiNativeBindings bindings = _kiwiNativeBindingsFactory();
     try {
-      final Pointer<flutter_kiwi_ffi_handle> handle = _bindings
+      final Pointer<flutter_kiwi_ffi_handle> handle = bindings
           .flutter_kiwi_ffi_init(
             modelPathPtr.cast(),
             numThreads,
@@ -155,14 +310,15 @@ class KiwiAnalyzer {
             matchOptions,
           );
       if (handle == nullptr) {
-        throw KiwiException(_readLastError());
+        throw KiwiException(_readLastError(bindings));
       }
-      return KiwiAnalyzer._(handle);
+      return KiwiAnalyzer._(handle, bindings);
     } finally {
       malloc.free(modelPathPtr);
     }
   }
 
+  /// The backend version string reported by the native runtime.
   String get nativeVersion {
     final Pointer<Char> ptr = _bindings.flutter_kiwi_ffi_version();
     if (ptr == nullptr) {
@@ -171,6 +327,11 @@ class KiwiAnalyzer {
     return ptr.cast<Utf8>().toDartString();
   }
 
+  /// Analyzes [text] and returns candidate tokenization results.
+  ///
+  /// The [options] control candidate count and matching behavior.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
   Future<KiwiAnalyzeResult> analyze(
     String text, {
     KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
@@ -185,7 +346,7 @@ class KiwiAnalyzer {
         options.matchOptions,
       );
       if (raw == nullptr) {
-        throw KiwiException(_readLastError());
+        throw KiwiException(_readLastError(_bindings));
       }
       try {
         final String jsonText = raw.cast<Utf8>().toDartString();
@@ -202,6 +363,13 @@ class KiwiAnalyzer {
     }
   }
 
+  /// Adds a user dictionary entry to this analyzer instance.
+  ///
+  /// The [word] is the surface form to register.
+  /// The [tag] is a POS tag string and [score] adjusts dictionary confidence.
+  ///
+  /// Throws a [KiwiException] if registration fails or if this analyzer is
+  /// closed.
   Future<void> addUserWord(
     String word, {
     String tag = 'NNP',
@@ -218,7 +386,7 @@ class KiwiAnalyzer {
         score,
       );
       if (status != 0) {
-        throw KiwiException(_readLastError());
+        throw KiwiException(_readLastError(_bindings));
       }
     } finally {
       malloc.free(wordPtr);
@@ -226,12 +394,15 @@ class KiwiAnalyzer {
     }
   }
 
+  /// Releases native resources held by this analyzer.
+  ///
+  /// After calling this method, subsequent API calls throw a [KiwiException].
   Future<void> close() async {
     if (_closed) return;
     final int status = _bindings.flutter_kiwi_ffi_close(_handle);
     _closed = true;
     if (status != 0) {
-      throw KiwiException(_readLastError());
+      throw KiwiException(_readLastError(_bindings));
     }
   }
 
@@ -243,8 +414,8 @@ class KiwiAnalyzer {
     }
   }
 
-  static String _readLastError() {
-    final Pointer<Char> errorPtr = _bindings.flutter_kiwi_ffi_last_error();
+  static String _readLastError(KiwiNativeBindings bindings) {
+    final Pointer<Char> errorPtr = bindings.flutter_kiwi_ffi_last_error();
     if (errorPtr == nullptr) {
       return 'Unknown kiwi native error.';
     }
@@ -315,7 +486,7 @@ class KiwiAnalyzer {
     await outputDir.create(recursive: true);
 
     try {
-      for (final String fileName in _modelFileNames) {
+      for (final String fileName in kiwiModelFileNames) {
         final File outputFile = File('${outputDir.path}/$fileName');
         if (outputFile.existsSync() && outputFile.lengthSync() > 0) {
           continue;
@@ -329,7 +500,8 @@ class KiwiAnalyzer {
     } catch (error) {
       throw KiwiException(
         'Failed to load Kiwi model assets from "$normalized". '
-        'Declare assets and include required files (${_modelFileNames.join(', ')}). '
+        'Declare assets and include required files '
+        '(${kiwiModelFileNames.join(', ')}). '
         'Original error: $error',
       );
     }
@@ -402,12 +574,12 @@ class KiwiAnalyzer {
   }
 
   static bool _hasModelFiles(String modelDirPath) {
-    for (final String fileName in _modelFileNames) {
+    for (final String fileName in kiwiModelFileNames) {
       final File file = File('$modelDirPath/$fileName');
       if (!file.existsSync()) {
         return false;
       }
-      final int minBytes = _minModelFileBytes[fileName] ?? 1;
+      final int minBytes = kiwiMinModelFileBytes[fileName] ?? 1;
       if (file.lengthSync() < minBytes) {
         return false;
       }
@@ -418,7 +590,7 @@ class KiwiAnalyzer {
   static Future<void> _ensureArchiveReady(File archiveFile) async {
     if (!archiveFile.existsSync() || archiveFile.lengthSync() == 0) {
       await _downloadFile(
-        uri: Uri.parse(_defaultModelArchiveUrl),
+        uri: Uri.parse(_effectiveDefaultModelArchiveUrl()),
         outputFile: archiveFile,
       );
     }
@@ -429,7 +601,7 @@ class KiwiAnalyzer {
         await archiveFile.delete();
       }
       await _downloadFile(
-        uri: Uri.parse(_defaultModelArchiveUrl),
+        uri: Uri.parse(_effectiveDefaultModelArchiveUrl()),
         outputFile: archiveFile,
       );
       await _verifyArchiveChecksum(archiveFile);
@@ -437,7 +609,9 @@ class KiwiAnalyzer {
   }
 
   static Future<void> _verifyArchiveChecksum(File archiveFile) async {
-    final String expected = _defaultModelArchiveSha256.trim().toLowerCase();
+    final String expected = _effectiveDefaultModelArchiveSha256()
+        .trim()
+        .toLowerCase();
     if (expected.isEmpty) {
       return;
     }
@@ -456,7 +630,7 @@ class KiwiAnalyzer {
     required Uri uri,
     required File outputFile,
   }) async {
-    final HttpClient client = HttpClient();
+    final HttpClient client = _kiwiHttpClientFactory();
     client.connectionTimeout = const Duration(seconds: 20);
     try {
       final HttpClientRequest request = await client

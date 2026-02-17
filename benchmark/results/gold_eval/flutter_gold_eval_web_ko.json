@@ -1,0 +1,55 @@
+{
+  "task": "gold_eval",
+  "runtime": "flutter_kiwi_nlp",
+  "platform": "macos",
+  "generated_at_utc": "2026-02-17T14:58:26.197549Z",
+  "dataset_name": "gold_eval_web_ko",
+  "gold_asset": "assets/gold_eval_web_ko.txt",
+  "top_n": 1,
+  "num_threads": -1,
+  "build_options": 1039,
+  "create_match_options": 8454175,
+  "analyze_match_options": 8454175,
+  "sentence_count": 158,
+  "gold_token_count": 6400,
+  "predicted_token_count": 6488,
+  "init_ms": 1453.078,
+  "eval_elapsed_ms": 186.428,
+  "token_edit_distance": 797,
+  "token_edit_denominator": 6527,
+  "token_agreement": 0.8778918339206374,
+  "pos_edit_distance": 1042,
+  "pos_edit_denominator": 6527,
+  "pos_agreement": 0.8403554466064042,
+  "token_sequence_exact_count": 6,
+  "token_sequence_exact_match": 0.0379746835443038,
+  "sentence_exact_count": 3,
+  "sentence_exact_match": 0.0189873417721519,
+  "sample_mismatches": [
+    {
+      "sentence": "무난해서 좋습니다,.",
+      "gold": "무난/XR 하/XSA 여서/EC 좋/VA 습니다/EF ,/SP ./SF",
+      "predicted": "무난/XR 하/XSA 어서/EC 좋/VA 습니다/EC ,/SP ./SF"
+    },
+    {
+      "sentence": "봉건사회 해체 및 자본주의 맹아론: 20세기 아시아 사회를 정체론으로 인식한 서양중심주의 역사인식(한국의 경우 일제의 식민사관)에 대응하여 자본주의적 맹아의 검출을 위해 내재적 발전 역사를 검증하려는 연구방법론.",
+      "gold": "봉건/NNG 사회/NNG 해체/NNG 및/MAJ 자본주의/NNG 맹아/NNG 론/XSN :/SP 20/SN 세기/NNB 아시아/NNP 사회/NNG 를/JKO 정체/NNG 론/XSN 으로/JKB 인식/NNG 하/XSV ㄴ/ETM 서양/NNG 중심주의/NNG 역사/NNG 인식/NNG (/SSO 한국/NNP 의/JKG 경우/NNG 일제/NNG 의/JKG 식민/NNG 사관/NNG )/SSC 에/JKB 대응/NNG 하/XSV 여/EC 자본주의/NNG 적/XSN 맹아/NNG 의/JKG 검출/NNG 을/JKO 위하/VV 여/EC 내재/NNG 적/XSN 발전/NNG 역사/NNG 를/JKO 검증/NNG 하/XSV 려는/ETM 연구/NNG 방법/NNG 론/XSN ./SF",
+      "predicted": "봉건/NNG 사회/NNG 해체/NNG 및/MAG 자본주의/NNG 맹아/NNG 론/XSN :/SP 20/SN 세기/NNG 아시아/NNP 사회/NNG 를/JKO 정체/NNG 론/XSN 으로/JKB 인식/NNG 하/XSV ᆫ/ETM 서양/NNG 중심주의/NNG 역사/NNG 인식/NNG (/SSO 한국/NNP 의/JKG 경우/NNG 일제/NNG 의/JKG 식민/NNG 사관/NNG )/SSC 에/JKB 대응/NNG 하/XSV 어/EC 자본주의/NNG 적/XSN 맹아/NNG 의/JKG 검출/NNG 을/JKO 위하/VV 어/EC 내재/NNG 적/XSN 발전/NNG 역사/NNG 를/JKO 검증/NNG 하/XSV 려는/ETM 연구/NNG 방법/NNG 론/XSN ./SF"
+    },
+    {
+      "sentence": "미스크가 없어서 주문해서 쓰긴 하네요 예전엔 무지 쌌는데~",
+      "gold": "미스크/NNG 가/JKS 없/VA 어서/EC 주문/NNG 하/XSV 여서/EC 쓰/VV 기/ETN ㄴ/JX 하/VX 네요/EF 예전/NNG 에/JKB ㄴ/JX 무지/MAG 싸/VA 았/EP 는데/EC ~/SO",
+      "predicted": "미스크/NNG 가/JKS 없/VA 어서/EC 주문/NNG 하/XSV 어서/EC 쓰/VV 기/ETN ᆫ/JX 하/VV 네요/EF 예전/NNG 에/JKB ᆫ/JX 무지/MAG 싸/VA 었/EP 는데/EC ~/SO"
+    },
+    {
+      "sentence": "순정보다 확실히 밝아요 시인성 좋은거 같아요 포장도 꼼꼼이 잘해서 왔구요 배송도 빨랐어요",
+      "gold": "순정/NNG 보다/JKB 확실히/MAG 밝/VA 아요/EF 시인/NNG 성/XSN 좋/VA 은/ETM 것/NNB 같/VA 아요/EF 포장/NNG 도/JX 꼼꼼이/MAG 잘/MAG 하/XSV 여서/EC 오/VV 았/EP 구요/EC 배송/NNG 도/JX 빠르/VA 았/EP 어요/EF",
+      "predicted": "순정/NNG 보다/JKB 확실히/MAG 밝/VA 어요/EF 시인/NNG 성/XSN 좋/VA 은/ETM 거/NNB 같/VA 어요/EF 포장/NNG 도/JX 꼼꼼/XR 이/JKS 잘/MAG 하/VV 어서/EC 오/VV 었/EP 구요/EF 배송/NNG 도/JX 빠르/VA 었/EP 어요/EF"
+    },
+    {
+      "sentence": "가게를 운영하는 사장님께서 대신 구매 해달라고 하셔서 구매하게되었는데 가게에 달아놓으니까 이쁘네요",
+      "gold": "가게/NNG 를/JKO 운영/NNG 하/XSV 는/ETM 사장/NNG 님/XSN 께서/JKS 대신/NNG 구매/NNG 하/XSV 여/EC 달/VX 라고/EC 하/VV 시/EP 어서/EC 구매/NNG 하/XSV 게/EC 되/VV 었/EP 는데/EC 가게/NNG 에/JKB 달/VV 아/EC 놓/VX 으니까/EC 이쁘/VA 네요/EF",
+      "predicted": "가게/NNG 를/JKO 운영/NNG 하/XSV 는/ETM 사장/NNG 님/XSN 께서/JKS 대신/NNG 구매/NNG 하/XSV 어/EC 달/VX 라고/EC 하/VV 시/EP 어서/EC 구매/NNG 하/XSV 게/EC 되/VV 었/EP 는데/EC 가게/NNG 에/JKB 닫/VV-I 어/EC 놓/VX 으니까/EC 이쁘/VA 네요/EF"
+    }
+  ]
+}

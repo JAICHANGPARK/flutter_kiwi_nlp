@@ -5,6 +5,7 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 ## 목차
 
 - [패키지명 안내](#패키지명-안내)
+- [기술 보고서](#기술-보고서)
 - [AI 활용 가이드](#ai-활용-가이드)
 - [지원 플랫폼](#지원-플랫폼)
 - [미지원 플랫폼](#미지원-플랫폼)
@@ -30,6 +31,12 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 
 현재 `pubspec.yaml`의 패키지명은 `flutter_kiwi_nlp`입니다.
 의존성과 import는 `flutter_kiwi_nlp`를 사용하세요.
+
+## 기술 보고서
+
+- PDF: [`doc/technical_report_arxiv.pdf`](doc/technical_report_arxiv.pdf)
+- arXiv 스타일 LaTeX 원문:
+  [`doc/technical_report_arxiv.tex`](doc/technical_report_arxiv.tex)
 
 ## AI 활용 가이드
 
@@ -156,7 +163,7 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 | 항목 | 기준 | 크기(대략) | 비고 |
 | --- | --- | --- | --- |
 | `flutter_kiwi_nlp` 기본 모델 | 압축 해제 모델 디렉터리 (`assets/kiwi-models/cong/base`) | `95MB` | 앱 에셋으로 포함될 수 있는 실제 모델 파일 집합 |
-| `flutter_kiwi_nlp` 기본 모델 (tgz) | 동일 디렉터리를 로컬에서 tar.gz 압축 (`/tmp/flutter_kiwi_model_base.tgz`) | `76MB` | 압축 기준 비교용 로컬 측정치 |
+| `flutter_kiwi_nlp` 기본 모델 (tgz) | 동일 디렉터리를 로컬에서 tar.gz 압축 (`./tmp/flutter_kiwi_model_base.tgz`) | `76MB` | 압축 기준 비교용 로컬 측정치 |
 | `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5MB` | PyPI에 게시된 압축 배포 파일 크기 |
 | Android `libkiwi.so` (참고) | 이 저장소 워크스페이스 빌드 산출물 | `159MB (arm64-v8a)`, `191MB (x86_64)` | 현재 파일은 `with debug_info`, `not stripped` 상태 |
 
@@ -197,6 +204,18 @@ uv pip install kiwipiepy
 
 ```bash
 uv run python tool/benchmark/run_compare.py --device macos
+
+# 논문용 반복 측정 + 옵션 동등화 예시
+uv run python tool/benchmark/run_compare.py \
+  --device macos \
+  --trials 5 \
+  --warmup-runs 3 \
+  --measure-runs 15 \
+  --num-threads -1 \
+  --num-workers -1 \
+  --build-options 1039 \
+  --create-match-options 8454175 \
+  --analyze-match-options 8454175
 ```
 
 3. 결과 확인
@@ -207,27 +226,35 @@ cat benchmark/results/comparison.md
 
 생성 파일:
 
-- `benchmark/results/flutter_kiwi_benchmark.json`
-- `benchmark/results/kiwipiepy_benchmark.json`
+- `benchmark/results/flutter_kiwi_benchmark_trials.json`
+- `benchmark/results/kiwipiepy_benchmark_trials.json`
+- `benchmark/results/flutter_kiwi_benchmark_trial_XX.json`
+- `benchmark/results/kiwipiepy_benchmark_trial_XX.json`
+- `benchmark/results/flutter_kiwi_benchmark.json` (호환용 단일 결과: 마지막 trial)
+- `benchmark/results/kiwipiepy_benchmark.json` (호환용 단일 결과: 마지막 trial)
 - `benchmark/results/comparison.md`
 
 `run_compare.py` 옵션:
 
+- `--trials`
 - `--warmup-runs` / `--measure-runs` / `--top-n`
 - `--num-threads` (Flutter 쪽)
 - `--num-workers` (Python 쪽)
+- `--build-options`
+- `--create-match-options`
+- `--analyze-match-options` (또는 `--match-options`)
 - `--model-path` (양쪽 동일 모델 경로 강제)
 
 표기 예시:
 
-| 지표 | flutter_kiwi_nlp | kiwipiepy | 비율 (Flutter/Kiwi) |
+| 지표 | flutter_kiwi_nlp (평균 ± 표준편차) | kiwipiepy (평균 ± 표준편차) | 비율 (Flutter 평균 / Kiwi 평균) |
 | --- | ---: | ---: | ---: |
-| 초기화 시간 (ms, 낮을수록 좋음) | 120.40 | 98.10 | 1.23x (slower) |
-| 처리량 (analyses/s, 높을수록 좋음) | 650.20 | 702.90 | 0.93x (slower) |
-| 처리량 (chars/s, 높을수록 좋음) | 192004.11 | 200441.00 | 0.96x (slower) |
-| 처리량 (tokens/s, 높을수록 좋음) | 94000.00 | 101200.00 | 0.93x (slower) |
-| 평균 지연 (ms, 낮을수록 좋음) | 1.54 | 1.42 | 1.08x (slower) |
-| 토큰당 지연 (us/token, 낮을수록 좋음) | 16.20 | 14.75 | 1.10x (slower) |
+| 초기화 시간 (ms, 낮을수록 좋음) | 120.40 ± 3.20 | 98.10 ± 2.80 | 1.23x (slower) |
+| 처리량 (analyses/s, 높을수록 좋음) | 650.20 ± 12.30 | 702.90 ± 8.10 | 0.93x (slower) |
+| 처리량 (chars/s, 높을수록 좋음) | 192004.11 ± 4102.30 | 200441.00 ± 2310.10 | 0.96x (slower) |
+| 처리량 (tokens/s, 높을수록 좋음) | 94000.00 ± 2011.30 | 101200.00 ± 1188.40 | 0.93x (slower) |
+| 평균 지연 (ms, 낮을수록 좋음) | 1.54 ± 0.03 | 1.42 ± 0.02 | 1.08x (slower) |
+| 토큰당 지연 (us/token, 낮을수록 좋음) | 16.20 ± 0.25 | 14.75 ± 0.19 | 1.10x (slower) |
 
 ## 설치
 
@@ -453,20 +480,20 @@ final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
 
 ```dart
 final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
-  modelPath: '/absolute/path/to/kiwi-models/cong/base',
+  modelPath: '<MODEL_DIR>/kiwi-models/cong/base',
 );
 ```
 
 데스크톱/CI에서는 환경변수 방식도 가능합니다.
 
 ```bash
-FLUTTER_KIWI_NLP_MODEL_PATH=/absolute/path/to/model flutter run -d macos
+FLUTTER_KIWI_NLP_MODEL_PATH=<MODEL_DIR> flutter run -d macos
 ```
 
 PowerShell:
 
 ```powershell
-$env:FLUTTER_KIWI_NLP_MODEL_PATH='C:\kiwi\model\cong\base'
+$env:FLUTTER_KIWI_NLP_MODEL_PATH='<MODEL_DIR>\kiwi\model\cong\base'
 flutter run -d windows
 ```
 

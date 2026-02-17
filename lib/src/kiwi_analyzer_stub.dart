@@ -5,9 +5,24 @@ import 'kiwi_types.dart';
 const String _unsupportedMessage =
     'flutter_kiwi_nlp native backend is not available on this platform yet.';
 
+/// Fallback analyzer used on unsupported platforms.
+///
+/// All methods throw a [KiwiException] with an unsupported-platform message.
 class KiwiAnalyzer {
-  KiwiAnalyzer._();
+  @pragma('vm:never-inline')
+  KiwiAnalyzer();
 
+  Never _throwUnsupported() {
+    throw const KiwiException(_unsupportedMessage);
+  }
+
+  /// Creates an analyzer.
+  ///
+  /// Parameters are accepted for API compatibility with supported platforms:
+  /// [modelPath], [assetModelPath], [numThreads], [buildOptions], and
+  /// [matchOptions].
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
   static Future<KiwiAnalyzer> create({
     String? modelPath,
     String? assetModelPath,
@@ -15,27 +30,37 @@ class KiwiAnalyzer {
     int buildOptions = KiwiBuildOption.defaultOption,
     int matchOptions = KiwiMatchOption.allWithNormalizing,
   }) async {
-    throw const KiwiException(_unsupportedMessage);
+    KiwiAnalyzer()._throwUnsupported();
   }
 
+  /// Analyzes [text].
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
   Future<KiwiAnalyzeResult> analyze(
     String text, {
     KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
   }) async {
-    throw const KiwiException(_unsupportedMessage);
+    _throwUnsupported();
   }
 
+  /// Adds a user word.
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
   Future<void> addUserWord(
     String word, {
     String tag = 'NNP',
     double score = 0.0,
   }) async {
-    throw const KiwiException(_unsupportedMessage);
+    _throwUnsupported();
   }
 
+  /// Releases analyzer resources.
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
   Future<void> close() async {
-    throw const KiwiException(_unsupportedMessage);
+    _throwUnsupported();
   }
 
+  /// The unsupported-platform message.
   String get nativeVersion => _unsupportedMessage;
 }

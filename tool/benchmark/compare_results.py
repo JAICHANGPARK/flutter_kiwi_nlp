@@ -5,25 +5,31 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import statistics
 from pathlib import Path
 from typing import Any
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Generate a markdown comparison table from two JSON files.'
+        description=(
+            'Generate a markdown comparison table from benchmark JSON files. '
+            'Each input may be a single JSON object or a list of trial '
+            'objects.'
+        )
     )
     parser.add_argument(
         '--flutter-json',
         type=Path,
         required=True,
-        help='Path to flutter benchmark result JSON.',
+        help='Path to flutter benchmark result JSON (dict or list[dict]).',
     )
     parser.add_argument(
         '--kiwi-json',
         type=Path,
         required=True,
-        help='Path to kiwipiepy benchmark result JSON.',
+        help='Path to kiwipiepy benchmark result JSON (dict or list[dict]).',
     )
     parser.add_argument(
         '--output-md',
@@ -34,20 +40,103 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_json(path: Path) -> dict[str, Any]:
+def load_trials(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f'Result file not found: {path}')
 
     raw = json.loads(path.read_text())
-    if not isinstance(raw, dict):
-        raise TypeError(f'Invalid result payload: {path}')
-    return raw
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list) and raw and all(isinstance(x, dict) for x in raw):
+        return raw
+
+    raise TypeError(
+        f'Invalid result payload: {path}. Expected dict or non-empty list[dict].'
+    )
 
 
-def format_number(value: Any, decimals: int = 2) -> str:
+def safe_float(payload: dict[str, Any], key: str) -> float:
+    value = payload.get(key)
     if isinstance(value, (int, float)):
-        return f'{value:.{decimals}f}'
-    return str(value)
+        return float(value)
+    return 0.0
+
+
+def summarize_metric(trials: list[dict[str, Any]], key: str) -> tuple[float, float]:
+    values = [safe_float(trial, key) for trial in trials]
+    mean = statistics.fmean(values)
+    stddev = statistics.stdev(values) if len(values) > 1 else 0.0
+    return mean, stddev
+
+
+def percentile(values: list[float], quantile: float) -> float:
+    if not values:
+        return 0.0
+    if quantile <= 0:
+        return min(values)
+    if quantile >= 1:
+        return max(values)
+
+    sorted_values = sorted(values)
+    position = (len(sorted_values) - 1) * quantile
+    lower_index = math.floor(position)
+    upper_index = math.ceil(position)
+    if lower_index == upper_index:
+        return sorted_values[lower_index]
+
+    lower = sorted_values[lower_index]
+    upper = sorted_values[upper_index]
+    weight = position - lower_index
+    return lower + ((upper - lower) * weight)
+
+
+def summarize_median_p95(
+    trials: list[dict[str, Any]],
+    key: str,
+) -> tuple[float, float]:
+    values = [safe_float(trial, key) for trial in trials]
+    if not values:
+        return 0.0, 0.0
+    return statistics.median(values), percentile(values, 0.95)
+
+
+def effective_analyses_per_sec(
+    init_ms: float,
+    warm_analyses_per_sec: float,
+    analysis_count: int,
+) -> float:
+    if analysis_count <= 0 or warm_analyses_per_sec <= 0:
+        return 0.0
+
+    total_seconds = (init_ms / 1000.0) + (analysis_count / warm_analyses_per_sec)
+    if total_seconds <= 0:
+        return 0.0
+    return analysis_count / total_seconds
+
+
+def summarize_effective_analyses_per_sec(
+    trials: list[dict[str, Any]],
+    analysis_count: int,
+) -> tuple[float, float]:
+    values = [
+        effective_analyses_per_sec(
+            init_ms=safe_float(trial, 'init_ms'),
+            warm_analyses_per_sec=safe_float(trial, 'analyses_per_sec'),
+            analysis_count=analysis_count,
+        )
+        for trial in trials
+    ]
+    mean = statistics.fmean(values)
+    stddev = statistics.stdev(values) if len(values) > 1 else 0.0
+    return mean, stddev
+
+
+def first_or_mixed(trials: list[dict[str, Any]], key: str) -> str:
+    values = [trial.get(key) for trial in trials]
+    first = values[0]
+    if all(value == first for value in values):
+        return str(first)
+    return 'mixed'
 
 
 def format_ratio(
@@ -73,99 +162,181 @@ def format_ratio(
     return f'{ratio_text} ({faster})'
 
 
-def safe_float(payload: dict[str, Any], key: str) -> float:
-    value = payload.get(key)
-    if isinstance(value, (int, float)):
-        return float(value)
-    return 0.0
+def format_mean_std(mean: float, stddev: float, decimals: int = 2) -> str:
+    return f'{mean:.{decimals}f} ± {stddev:.{decimals}f}'
 
 
-def build_report(flutter: dict[str, Any], kiwi: dict[str, Any]) -> str:
+def build_report(
+    flutter_trials: list[dict[str, Any]],
+    kiwi_trials: list[dict[str, Any]],
+) -> str:
     lines: list[str] = []
     lines.append('# Benchmark Comparison: flutter_kiwi_nlp vs kiwipiepy')
     lines.append('')
+
     lines.append('## Run Metadata')
     lines.append('')
     lines.append('| Field | flutter_kiwi_nlp | kiwipiepy |')
     lines.append('| --- | --- | --- |')
     lines.append(
-        f"| runtime | {flutter.get('runtime', '')} | {kiwi.get('runtime', '')} |"
+        f"| runtime | {first_or_mixed(flutter_trials, 'runtime')}"
+        f" | {first_or_mixed(kiwi_trials, 'runtime')} |"
     )
     lines.append(
-        f"| platform | {flutter.get('platform', '')} | {kiwi.get('platform', '')} |"
+        f"| platform | {first_or_mixed(flutter_trials, 'platform')}"
+        f" | {first_or_mixed(kiwi_trials, 'platform')} |"
     )
     lines.append(
-        f"| generated_at_utc | {flutter.get('generated_at_utc', '')}"
-        f" | {kiwi.get('generated_at_utc', '')} |"
+        f"| generated_at_utc (first trial) | {flutter_trials[0].get('generated_at_utc', '')}"
+        f" | {kiwi_trials[0].get('generated_at_utc', '')} |"
+    )
+    lines.append(f'| trials | {len(flutter_trials)} | {len(kiwi_trials)} |')
+    lines.append(
+        f"| sentence_count | {first_or_mixed(flutter_trials, 'sentence_count')}"
+        f" | {first_or_mixed(kiwi_trials, 'sentence_count')} |"
     )
     lines.append(
-        f"| sentence_count | {flutter.get('sentence_count', '')}"
-        f" | {kiwi.get('sentence_count', '')} |"
+        f"| warmup_runs | {first_or_mixed(flutter_trials, 'warmup_runs')}"
+        f" | {first_or_mixed(kiwi_trials, 'warmup_runs')} |"
     )
     lines.append(
-        f"| warmup_runs | {flutter.get('warmup_runs', '')}"
-        f" | {kiwi.get('warmup_runs', '')} |"
+        f"| measure_runs | {first_or_mixed(flutter_trials, 'measure_runs')}"
+        f" | {first_or_mixed(kiwi_trials, 'measure_runs')} |"
     )
     lines.append(
-        f"| measure_runs | {flutter.get('measure_runs', '')}"
-        f" | {kiwi.get('measure_runs', '')} |"
+        f"| top_n | {first_or_mixed(flutter_trials, 'top_n')}"
+        f" | {first_or_mixed(kiwi_trials, 'top_n')} |"
     )
     lines.append(
-        f"| top_n | {flutter.get('top_n', '')} | {kiwi.get('top_n', '')} |"
+        f"| build_options | {first_or_mixed(flutter_trials, 'build_options')}"
+        f" | {first_or_mixed(kiwi_trials, 'build_options')} |"
+    )
+    lines.append(
+        f"| create_match_options | {first_or_mixed(flutter_trials, 'create_match_options')}"
+        f" | {first_or_mixed(kiwi_trials, 'create_match_options')} |"
+    )
+    lines.append(
+        f"| analyze_match_options | {first_or_mixed(flutter_trials, 'analyze_match_options')}"
+        f" | {first_or_mixed(kiwi_trials, 'analyze_match_options')} |"
+    )
+    lines.append(
+        f"| num_threads / num_workers | {first_or_mixed(flutter_trials, 'num_threads')}"
+        f" | {first_or_mixed(kiwi_trials, 'num_workers')} |"
     )
     lines.append('')
 
-    init_flutter = safe_float(flutter, 'init_ms')
-    init_kiwi = safe_float(kiwi, 'init_ms')
-    throughput_flutter = safe_float(flutter, 'analyses_per_sec')
-    throughput_kiwi = safe_float(kiwi, 'analyses_per_sec')
-    chars_flutter = safe_float(flutter, 'chars_per_sec')
-    chars_kiwi = safe_float(kiwi, 'chars_per_sec')
-    tokens_flutter = safe_float(flutter, 'tokens_per_sec')
-    tokens_kiwi = safe_float(kiwi, 'tokens_per_sec')
-    latency_flutter = safe_float(flutter, 'avg_latency_ms')
-    latency_kiwi = safe_float(kiwi, 'avg_latency_ms')
-    token_latency_flutter = safe_float(flutter, 'avg_token_latency_us')
-    token_latency_kiwi = safe_float(kiwi, 'avg_token_latency_us')
+    warm_metric_specs: list[tuple[str, str, bool]] = [
+        ('analyses_per_sec', 'Throughput (analyses/s, higher better)', False),
+        ('chars_per_sec', 'Throughput (chars/s, higher better)', False),
+        ('tokens_per_sec', 'Throughput (tokens/s, higher better)', False),
+        (
+            'avg_latency_ms',
+            'Avg warm latency (ms, lower better)',
+            True,
+        ),
+        (
+            'avg_token_latency_us',
+            'Avg warm token latency (us/token, lower better)',
+            True,
+        ),
+    ]
 
-    lines.append('## Comparison')
+    lines.append('## Warm Path Comparison (Primary, Init Excluded)')
     lines.append('')
-    lines.append('| Metric | flutter_kiwi_nlp | kiwipiepy | Ratio (Flutter/Kiwi) |')
+    lines.append(
+        '| Metric | flutter_kiwi_nlp (mean ± std) '
+        '| kiwipiepy (mean ± std) | Ratio (Flutter mean / Kiwi mean) |'
+    )
+    lines.append('| --- | ---: | ---: | ---: |')
+
+    for key, label, inverse in warm_metric_specs:
+        flutter_mean, flutter_std = summarize_metric(flutter_trials, key)
+        kiwi_mean, kiwi_std = summarize_metric(kiwi_trials, key)
+        lines.append(
+            f'| {label} | {format_mean_std(flutter_mean, flutter_std)} '
+            f'| {format_mean_std(kiwi_mean, kiwi_std)} '
+            f'| {format_ratio(flutter_mean, kiwi_mean, inverse=inverse)} |'
+        )
+
+    flutter_init_median, flutter_init_p95 = summarize_median_p95(
+        flutter_trials,
+        'init_ms',
+    )
+    kiwi_init_median, kiwi_init_p95 = summarize_median_p95(
+        kiwi_trials,
+        'init_ms',
+    )
+
+    lines.append('')
+    lines.append('## Cold Start Comparison (Reported Separately)')
+    lines.append('')
+    lines.append('| Metric | flutter_kiwi_nlp | kiwipiepy | Ratio |')
     lines.append('| --- | ---: | ---: | ---: |')
     lines.append(
-        '| Init time (ms, lower better) | '
-        f"{format_number(init_flutter)} | {format_number(init_kiwi)} | "
-        f"{format_ratio(init_flutter, init_kiwi, inverse=True)} |"
+        '| Init time (ms, lower better) '
+        f'| median {flutter_init_median:.2f}, p95 {flutter_init_p95:.2f} '
+        f'| median {kiwi_init_median:.2f}, p95 {kiwi_init_p95:.2f} '
+        f'| {format_ratio(flutter_init_median, kiwi_init_median, inverse=True)} |'
     )
-    lines.append(
-        '| Throughput (analyses/s, higher better) | '
-        f"{format_number(throughput_flutter)}"
-        f" | {format_number(throughput_kiwi)}"
-        f" | {format_ratio(throughput_flutter, throughput_kiwi)} |"
-    )
-    lines.append(
-        '| Throughput (chars/s, higher better) | '
-        f"{format_number(chars_flutter)} | {format_number(chars_kiwi)}"
-        f" | {format_ratio(chars_flutter, chars_kiwi)} |"
-    )
-    lines.append(
-        '| Throughput (tokens/s, higher better) | '
-        f"{format_number(tokens_flutter)} | {format_number(tokens_kiwi)}"
-        f" | {format_ratio(tokens_flutter, tokens_kiwi)} |"
-    )
-    lines.append(
-        '| Avg latency (ms, lower better) | '
-        f"{format_number(latency_flutter)} | {format_number(latency_kiwi)}"
-        f" | {format_ratio(latency_flutter, latency_kiwi, inverse=True)} |"
-    )
-    lines.append(
-        '| Avg token latency (us/token, lower better) | '
-        f"{format_number(token_latency_flutter)}"
-        f" | {format_number(token_latency_kiwi)}"
-        f" | {format_ratio(token_latency_flutter, token_latency_kiwi, inverse=True)} |"
-    )
+
+    session_lengths = [1, 10, 100, 1000]
     lines.append('')
-    lines.append('> Note: Use identical corpus, warmup, top_n, and hardware settings.')
+    lines.append('## Session-Length Effective Throughput (Init Included)')
+    lines.append('')
+    lines.append(
+        '| Session analyses | flutter_kiwi_nlp effective analyses/s '
+        '(mean ± std) | kiwipiepy effective analyses/s (mean ± std) '
+        '| Ratio (Flutter mean / Kiwi mean) |'
+    )
+    lines.append('| ---: | ---: | ---: | ---: |')
+
+    for session_analyses in session_lengths:
+        flutter_effective_mean, flutter_effective_std = (
+            summarize_effective_analyses_per_sec(
+                flutter_trials,
+                analysis_count=session_analyses,
+            )
+        )
+        kiwi_effective_mean, kiwi_effective_std = (
+            summarize_effective_analyses_per_sec(
+                kiwi_trials,
+                analysis_count=session_analyses,
+            )
+        )
+        lines.append(
+            f'| {session_analyses} '
+            f'| {format_mean_std(flutter_effective_mean, flutter_effective_std)} '
+            f'| {format_mean_std(kiwi_effective_mean, kiwi_effective_std)} '
+            f'| {format_ratio(flutter_effective_mean, kiwi_effective_mean)} |'
+        )
+
+    lines.append('')
+    lines.append('## Per-Trial Raw Snapshot')
+    lines.append('')
+    lines.append(
+        '| Trial | Flutter init (ms) | Kiwi init (ms) '
+        '| Flutter warm analyses/s | Kiwi warm analyses/s |'
+    )
+    lines.append('| ---: | ---: | ---: | ---: | ---: |')
+
+    min_trials = min(len(flutter_trials), len(kiwi_trials))
+    for index in range(min_trials):
+        flutter_trial = flutter_trials[index]
+        kiwi_trial = kiwi_trials[index]
+        lines.append(
+            f"| {index + 1} | {safe_float(flutter_trial, 'init_ms'):.2f}"
+            f" | {safe_float(kiwi_trial, 'init_ms'):.2f}"
+            f" | {safe_float(flutter_trial, 'analyses_per_sec'):.2f}"
+            f" | {safe_float(kiwi_trial, 'analyses_per_sec'):.2f} |"
+        )
+
+    lines.append('')
+    lines.append(
+        '> Note: Warm metrics are the primary steady-state indicators. '\
+        'Cold start is reported separately using median and p95 to reduce '\
+        'single-run volatility. Session-length effective throughput includes '\
+        'init overhead and illustrates short-session user impact.'
+    )
 
     return '\n'.join(lines) + '\n'
 
@@ -173,10 +344,10 @@ def build_report(flutter: dict[str, Any], kiwi: dict[str, Any]) -> str:
 def main() -> int:
     args = parse_args()
 
-    flutter = load_json(args.flutter_json)
-    kiwi = load_json(args.kiwi_json)
+    flutter_trials = load_trials(args.flutter_json)
+    kiwi_trials = load_trials(args.kiwi_json)
 
-    report = build_report(flutter, kiwi)
+    report = build_report(flutter_trials, kiwi_trials)
 
     args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_md.write_text(report)

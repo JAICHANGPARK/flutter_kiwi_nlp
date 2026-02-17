@@ -54,8 +54,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--num-workers',
         type=int,
-        default=0,
+        default=-1,
         help='num_workers for kiwipiepy benchmark.',
+    )
+    parser.add_argument(
+        '--build-options',
+        type=int,
+        default=1039,
+        help='Bitwise Kiwi build option value passed to both runtimes.',
+    )
+    parser.add_argument(
+        '--create-match-options',
+        type=int,
+        default=8454175,
+        help='Bitwise create-time match option value for Flutter parity metadata.',
+    )
+    parser.add_argument(
+        '--analyze-match-options',
+        '--match-options',
+        dest='analyze_match_options',
+        type=int,
+        default=8454175,
+        help='Bitwise analyze-time match option value passed to both runtimes.',
+    )
+    parser.add_argument(
+        '--trials',
+        type=int,
+        default=5,
+        help='Number of repeated benchmark trials per runtime.',
     )
     parser.add_argument(
         '--model-path',
@@ -120,8 +146,9 @@ def run_flutter_benchmark(
         for line in process.stdout:
             print(line, end='')
 
-            if line.startswith(marker):
-                raw_json = line[len(marker) :].strip()
+            marker_index = line.find(marker)
+            if marker_index != -1:
+                raw_json = line[marker_index + len(marker) :].strip()
                 parsed = json.loads(raw_json)
                 if not isinstance(parsed, dict):
                     raise TypeError(
@@ -151,6 +178,14 @@ def run_flutter_benchmark(
 
 def main() -> int:
     args = parse_args()
+    if args.trials < 1:
+        raise ValueError('--trials must be >= 1')
+    if args.build_options < 0:
+        raise ValueError('--build-options must be >= 0')
+    if args.create_match_options < 0:
+        raise ValueError('--create-match-options must be >= 0')
+    if args.analyze_match_options < 0:
+        raise ValueError('--analyze-match-options must be >= 0')
 
     repo_root = Path(__file__).resolve().parents[2]
     output_dir = args.output_dir
@@ -164,6 +199,8 @@ def main() -> int:
 
     flutter_json = output_dir / 'flutter_kiwi_benchmark.json'
     kiwi_json = output_dir / 'kiwipiepy_benchmark.json'
+    flutter_trials_json = output_dir / 'flutter_kiwi_benchmark_trials.json'
+    kiwi_trials_json = output_dir / 'kiwipiepy_benchmark_trials.json'
     report_md = output_dir / 'comparison.md'
 
     example_dir = repo_root / 'example'
@@ -181,29 +218,20 @@ def main() -> int:
         f'--dart-define=KIWI_BENCH_MEASURE_RUNS={args.measure_runs}',
         f'--dart-define=KIWI_BENCH_TOP_N={args.top_n}',
         f'--dart-define=KIWI_BENCH_NUM_THREADS={args.num_threads}',
+        f'--dart-define=KIWI_BENCH_BUILD_OPTIONS={args.build_options}',
+        f'--dart-define=KIWI_BENCH_CREATE_MATCH_OPTIONS={args.create_match_options}',
+        f'--dart-define=KIWI_BENCH_ANALYZE_MATCH_OPTIONS={args.analyze_match_options}',
     ]
     if args.model_path:
         flutter_command.append(
             f'--dart-define=KIWI_BENCH_MODEL_PATH={args.model_path}'
         )
 
-    run_command(['flutter', 'pub', 'get'], cwd=example_dir)
-    flutter_payload = run_flutter_benchmark(
-        flutter_command,
-        cwd=example_dir,
-        timeout_seconds=args.flutter_timeout_seconds,
-    )
-    flutter_json.write_text(
-        json.dumps(flutter_payload, ensure_ascii=False, indent=2)
-    )
-
-    kiwi_command = [
+    kiwi_command_base = [
         args.python_bin,
         str(repo_root / 'tool/benchmark/kiwipiepy_benchmark.py'),
         '--corpus',
         str(corpus_path.resolve()),
-        '--output',
-        str(kiwi_json),
         '--warmup-runs',
         str(args.warmup_runs),
         '--measure-runs',
@@ -212,19 +240,72 @@ def main() -> int:
         str(args.top_n),
         '--num-workers',
         str(args.num_workers),
+        '--build-options',
+        str(args.build_options),
+        '--create-match-options',
+        str(args.create_match_options),
+        '--analyze-match-options',
+        str(args.analyze_match_options),
     ]
     if args.model_path:
-        kiwi_command.extend(['--model-path', args.model_path])
+        kiwi_command_base.extend(['--model-path', args.model_path])
 
-    run_command(kiwi_command, cwd=repo_root)
+    run_command(['flutter', 'pub', 'get'], cwd=example_dir)
+
+    flutter_trials: list[dict[str, object]] = []
+    kiwi_trials: list[dict[str, object]] = []
+
+    for trial_id in range(1, args.trials + 1):
+        print(f'\n=== Trial {trial_id}/{args.trials} ===')
+
+        trial_flutter_command = flutter_command + [
+            f'--dart-define=KIWI_BENCH_TRIAL_ID={trial_id}'
+        ]
+        flutter_payload = run_flutter_benchmark(
+            trial_flutter_command,
+            cwd=example_dir,
+            timeout_seconds=args.flutter_timeout_seconds,
+        )
+        flutter_trials.append(flutter_payload)
+        (output_dir / f'flutter_kiwi_benchmark_trial_{trial_id:02d}.json').write_text(
+            json.dumps(flutter_payload, ensure_ascii=False, indent=2)
+        )
+
+        kiwi_trial_json = output_dir / f'kiwipiepy_benchmark_trial_{trial_id:02d}.json'
+        trial_kiwi_command = kiwi_command_base + [
+            '--trial-id',
+            str(trial_id),
+            '--output',
+            str(kiwi_trial_json),
+        ]
+        run_command(trial_kiwi_command, cwd=repo_root)
+        kiwi_payload_raw = json.loads(kiwi_trial_json.read_text())
+        if not isinstance(kiwi_payload_raw, dict):
+            raise TypeError('kiwipiepy benchmark payload must be a JSON object.')
+        kiwi_trials.append(kiwi_payload_raw)
+
+    flutter_trials_json.write_text(
+        json.dumps(flutter_trials, ensure_ascii=False, indent=2)
+    )
+    kiwi_trials_json.write_text(
+        json.dumps(kiwi_trials, ensure_ascii=False, indent=2)
+    )
+
+    # Keep legacy single-run files for compatibility by writing the final trial.
+    flutter_json.write_text(
+        json.dumps(flutter_trials[-1], ensure_ascii=False, indent=2)
+    )
+    kiwi_json.write_text(
+        json.dumps(kiwi_trials[-1], ensure_ascii=False, indent=2)
+    )
 
     report_command = [
         args.python_bin,
         str(repo_root / 'tool/benchmark/compare_results.py'),
         '--flutter-json',
-        str(flutter_json),
+        str(flutter_trials_json),
         '--kiwi-json',
-        str(kiwi_json),
+        str(kiwi_trials_json),
         '--output-md',
         str(report_md),
     ]

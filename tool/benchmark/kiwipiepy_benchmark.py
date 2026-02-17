@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import platform
 import sys
@@ -21,6 +22,10 @@ class BenchmarkConfig:
     measure_runs: int
     top_n: int
     num_workers: int
+    build_options: int
+    create_match_options: int
+    analyze_match_options: int
+    trial_id: int
     model_path: str
 
 
@@ -30,6 +35,26 @@ class RunStats:
     total_analyses: int
     total_chars: int
     total_tokens: int
+
+
+INTEGRATE_ALLOMORPH = 1
+LOAD_DEFAULT_DICT = 2
+LOAD_TYPO_DICT = 4
+LOAD_MULTI_DICT = 8
+MODEL_TYPE_MASK = 0x0F00
+
+MODEL_TYPE_MAP: dict[int, str | None] = {
+    0x0000: None,
+    0x0100: 'largest',
+    0x0200: 'knlm',
+    0x0300: 'sbg',
+    0x0400: 'cong',
+    0x0500: 'cong-global',
+}
+
+
+def resolve_model_type(build_options: int) -> str | None:
+    return MODEL_TYPE_MAP.get(build_options & MODEL_TYPE_MASK)
 
 
 def parse_args() -> BenchmarkConfig:
@@ -72,8 +97,38 @@ def parse_args() -> BenchmarkConfig:
     parser.add_argument(
         '--num-workers',
         type=int,
+        default=-1,
+        help='`num_workers` for `Kiwi` (-1 lets kiwi choose available cores).',
+    )
+    parser.add_argument(
+        '--build-options',
+        type=int,
+        default=1039,
+        help='Bitwise `KiwiBuildOption` value aligned with Flutter side.',
+    )
+    parser.add_argument(
+        '--create-match-options',
+        type=int,
+        default=8454175,
+        help=(
+            'Bitwise match option value accepted for parity metadata with '
+            'Flutter create(). kiwipiepy does not consume this at constructor '
+            'time.'
+        ),
+    )
+    parser.add_argument(
+        '--analyze-match-options',
+        '--match-options',
+        dest='analyze_match_options',
+        type=int,
+        default=8454175,
+        help='Bitwise match option value passed to `Kiwi.analyze(match_options=...)`.',
+    )
+    parser.add_argument(
+        '--trial-id',
+        type=int,
         default=0,
-        help='`num_workers` for `Kiwi` (0 lets kiwi decide).',
+        help='Optional trial id for repeated-measurement orchestration.',
     )
     parser.add_argument(
         '--model-path',
@@ -89,6 +144,14 @@ def parse_args() -> BenchmarkConfig:
         parser.error('--measure-runs must be >= 1')
     if args.top_n < 1:
         parser.error('--top-n must be >= 1')
+    if args.build_options < 0:
+        parser.error('--build-options must be >= 0')
+    if args.create_match_options < 0:
+        parser.error('--create-match-options must be >= 0')
+    if args.analyze_match_options < 0:
+        parser.error('--analyze-match-options must be >= 0')
+    if args.trial_id < 0:
+        parser.error('--trial-id must be >= 0')
 
     return BenchmarkConfig(
         corpus_path=args.corpus,
@@ -97,6 +160,10 @@ def parse_args() -> BenchmarkConfig:
         measure_runs=args.measure_runs,
         top_n=args.top_n,
         num_workers=args.num_workers,
+        build_options=args.build_options,
+        create_match_options=args.create_match_options,
+        analyze_match_options=args.analyze_match_options,
+        trial_id=args.trial_id,
         model_path=args.model_path,
     )
 
@@ -123,15 +190,26 @@ def create_kiwi(config: BenchmarkConfig) -> Any:
             '`python3 -m pip install kiwipiepy`.'
         ) from error
 
-    kwargs: dict[str, Any] = {'num_workers': config.num_workers}
+    kwargs: dict[str, Any] = {
+        'num_workers': config.num_workers,
+        'integrate_allomorph': (config.build_options & INTEGRATE_ALLOMORPH)
+        != 0,
+        'load_default_dict': (config.build_options & LOAD_DEFAULT_DICT) != 0,
+        'load_typo_dict': (config.build_options & LOAD_TYPO_DICT) != 0,
+        'load_multi_dict': (config.build_options & LOAD_MULTI_DICT) != 0,
+    }
+    model_type = resolve_model_type(config.build_options)
+    if model_type is not None:
+        kwargs['model_type'] = model_type
     if config.model_path:
         kwargs['model_path'] = config.model_path
 
-    try:
-        return Kiwi(**kwargs)
-    except TypeError:
-        kwargs.pop('num_workers', None)
-        return Kiwi(**kwargs)
+    supported = set(inspect.signature(Kiwi.__init__).parameters)
+    supported.discard('self')
+    filtered_kwargs = {
+        key: value for key, value in kwargs.items() if key in supported
+    }
+    return Kiwi(**filtered_kwargs)
 
 
 def run_measurement(
@@ -140,6 +218,7 @@ def run_measurement(
     *,
     runs: int,
     top_n: int,
+    match_options: int,
 ) -> RunStats:
     total_analyses = 0
     total_chars = 0
@@ -149,7 +228,11 @@ def run_measurement(
 
     for _ in range(runs):
         for sentence in sentences:
-            result = kiwi.analyze(sentence, top_n=top_n)
+            result = kiwi.analyze(
+                sentence,
+                top_n=top_n,
+                match_options=match_options,
+            )
             total_analyses += 1
             total_chars += len(sentence)
             total_tokens += count_best_candidate_tokens(result)
@@ -202,6 +285,11 @@ def to_payload(
         'measure_runs': config.measure_runs,
         'top_n': config.top_n,
         'num_workers': config.num_workers,
+        'build_options': config.build_options,
+        'create_match_options': config.create_match_options,
+        'analyze_match_options': config.analyze_match_options,
+        'trial_id': config.trial_id,
+        'model_type': resolve_model_type(config.build_options) or 'none',
         'sentence_count': sentence_count,
         'init_ms': init_ms,
         'elapsed_ms': stats.elapsed_ms,
@@ -232,6 +320,7 @@ def main() -> int:
         sentences,
         runs=config.warmup_runs,
         top_n=config.top_n,
+        match_options=config.analyze_match_options,
     )
 
     stats = run_measurement(
@@ -239,6 +328,7 @@ def main() -> int:
         sentences,
         runs=config.measure_runs,
         top_n=config.top_n,
+        match_options=config.analyze_match_options,
     )
 
     payload = to_payload(

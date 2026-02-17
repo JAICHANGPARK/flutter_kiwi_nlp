@@ -321,6 +321,88 @@ morphological compatibility and punctuation/quote state handling
 graph-decoding + statistical language-model architecture than to deep
 self-attention sequence encoding.
 
+\subsubsection{Conceptual Decoding Objective}
+For reviewer readability, the upstream behavior can be summarized as a lattice
+path optimization problem (conceptual/illustrative form; not a claim of
+reproducing every internal constant/feature exactly):
+\[
+\pi^{*}=\mathop{\mathrm{arg\,max}}_{\pi\in\Pi(G)} S(\pi),
+\]
+where \(G\) is the morpheme lattice and \(\Pi(G)\) is the set of valid paths.
+The path score is composed additively:
+\[
+S(\pi)=\sum_{t=1}^{T(\pi)}
+\left[
+s_{\mathrm{lm}}(e_t,h_{t-1})
+\;+\;
+\lambda^{\top}\phi_{\mathrm{rule}}(e_t,c_t)
+\;+\;
+\gamma^{\top}\phi_{\mathrm{lex}}(e_t)
+\right].
+\]
+Here, \(e_t\) denotes the selected candidate edge at step \(t\), \(h_{t-1}\) is
+the LM state carried from prior steps, \(c_t\) encodes local context such as
+quote/punctuation conditions, and \(\phi_{\mathrm{rule}},\phi_{\mathrm{lex}}\)
+represent rule/lexicon-derived feature contributions.
+
+State progression and pruning can be abstracted as:
+\[
+h_t=F(h_{t-1},e_t),\qquad
+\mathcal{B}_t=\mathrm{TopK}\!\left(\mathcal{P}_t(G),K,S\right),
+\]
+where \(\mathcal{P}_t(G)\) is the partial-path set at depth \(t\), and
+\(\mathcal{B}_t\) is the retained beam-like frontier.
+
+The LM-family switch exposed by Kiwi model type can be written as:
+\[
+s_{\mathrm{lm}}=
+\left\{
+\begin{array}{ll}
+s_{\mathrm{knlm}}, & m=\mathrm{knlm}, \\
+s_{\mathrm{knlm}}+\Delta_{\mathrm{sbg}}, & m=\mathrm{sbg}, \\
+s_{\mathrm{cong}}, & m=\mathrm{cong}, \\
+s_{\mathrm{cong\mbox{-}global}}, & m=\mathrm{congGlobal}.
+\end{array}
+\right.
+\]
+This formulation explains why Kiwi behaves as graph decoding with explicit LM
+state and rule scoring, rather than Transformer self-attention inference.
+
+\subsubsection{Skip-Bigram and Contextual N-gram Scoring (Conceptual)}
+Because the plugin references Kiwi model families \texttt{sbg} and
+\texttt{cong/congGlobal}, it is useful to provide explicit conceptual scoring
+forms for reviewer intuition:
+\[
+\Delta_{\mathrm{sbg}}(e_t,h_{t-1})
+\approx
+\sum_{k=1}^{\min(K,t-1)}\alpha_k\,
+\psi_k\!\left(m_t,m_{t-k}\right),
+\]
+where \(m_t\) is the morpheme realized by edge \(e_t\), \(k\) is skip distance,
+and \(\alpha_k\) is a distance-dependent weight.
+The function \(\psi_k\) denotes skip-bigram interaction score components.
+
+A generic contextual n-gram embedding style score can be expressed as:
+\[
+c_t=\sum_{j=1}^{\min(n-1,t-1)}W_j\,v(m_{t-j}),\qquad
+s_{\mathrm{cong}}(e_t,h_{t-1})\approx u(m_t)^{\top}c_t+b(m_t),
+\]
+where \(v(\cdot)\) and \(u(\cdot)\) denote context/target embeddings and
+\(W_j\) encodes positional/context projection.
+
+For the long-context variant, a practical abstraction is:
+\[
+c_t^{\mathrm{global}}=\sum_{j=1}^{\min(n_g-1,t-1)}W_j^{(g)}\,v(m_{t-j}),\qquad
+s_{\mathrm{cong\mbox{-}global}}(e_t,h_{t-1})
+\approx
+u(m_t)^{\top}c_t^{\mathrm{global}}+b_g(m_t),
+\]
+with \(n_g > n\) to reflect wider context coverage.
+
+These equations are intentionally presented as conceptual abstractions to
+explain model-family behavior at paper level; exact implementation constants and
+feature composition are defined by upstream Kiwi internals and model artifacts.
+
 Figure~\ref{fig:kiwi-internal-architecture} summarizes this upstream-oriented
 view of Kiwi internals as used in the plugin context.
 
@@ -1347,6 +1429,26 @@ Both benchmark programs produce comparable derived metrics:
   \]
 \end{itemize}
 
+Using notation aligned with benchmark payload fields:
+\[
+S=\frac{\texttt{elapsed\_ms}}{1000},\quad
+A=\texttt{total\_analyses},\quad
+C=\texttt{total\_chars},\quad
+K=\texttt{total\_tokens}.
+\]
+\[
+T_{\mathrm{analyses}}=\frac{A}{S},\quad
+T_{\mathrm{chars}}=\frac{C}{S},\quad
+T_{\mathrm{tokens}}=\frac{K}{S}.
+\]
+\[
+L_{\mathrm{avg-ms}}=\frac{\texttt{elapsed\_ms}}{A},\quad
+L_{\mathrm{token-us}}=\frac{1000\cdot\texttt{elapsed\_ms}}{K}.
+\]
+\[
+T_{\mathrm{eff}}(N)=\frac{N}{(\texttt{init\_ms}/1000)+(N/T_{\mathrm{analyses}})}.
+\]
+
 \subsection{Recorded Result Summary: Desktop Baseline (macOS, n=5)}
 \begin{longtable}{@{}L{0.34\linewidth}L{0.20\linewidth}L{0.20\linewidth}L{0.18\linewidth}@{}}
 \caption{macOS desktop warm-path summary (mean ± stddev)}\label{tab:benchmark}\\
@@ -1370,6 +1472,9 @@ Avg token latency (us/token, lower better) & 25.84 ± 1.48 & 18.46 ± 0.38 & 1.4
 To make variability interpretation more explicit, Table~\ref{tab:benchmark-ci}
 adds 95\% confidence intervals for desktop baseline means
 (\texttt{n = 5}, two-sided \texttt{t}-interval, \texttt{df = 4}).
+\[
+\mathrm{CI}_{95}(\mu)=\bar{x}\pm t_{0.975,\;n-1}\cdot\frac{s}{\sqrt{n}}.
+\]
 
 \begin{longtable}{@{}L{0.32\linewidth}L{0.29\linewidth}L{0.29\linewidth}@{}}
 \caption{Desktop baseline 95\% confidence intervals}\label{tab:benchmark-ci}\\
@@ -1727,6 +1832,36 @@ Metrics are sequence-level agreements based on normalized Levenshtein distance:
 token agreement compares \texttt{form} sequences, POS agreement compares
 \texttt{form/tag} sequences, and sentence exact match requires full sequence
 identity.
+\[
+A_{\mathrm{token}}
+=1-\frac{
+\sum_{i=1}^{M} d_{\mathrm{Lev}}(g_i^{\mathrm{form}},p_i^{\mathrm{form}})
+}{
+\sum_{i=1}^{M} \max\!\left(
+\left|g_i^{\mathrm{form}}\right|,\left|p_i^{\mathrm{form}}\right|
+\right)
+}.
+\]
+\[
+A_{\mathrm{pos}}
+=1-\frac{
+\sum_{i=1}^{M} d_{\mathrm{Lev}}(g_i^{\mathrm{pair}},p_i^{\mathrm{pair}})
+}{
+\sum_{i=1}^{M} \max\!\left(
+\left|g_i^{\mathrm{pair}}\right|,\left|p_i^{\mathrm{pair}}\right|
+\right)
+}.
+\]
+\[
+E_{\mathrm{token-seq}}
+=\frac{1}{M}\sum_{i=1}^{M}\mathbf{1}\!\left[
+g_i^{\mathrm{form}}=p_i^{\mathrm{form}}
+\right],\quad
+E_{\mathrm{sentence}}
+=\frac{1}{M}\sum_{i=1}^{M}\mathbf{1}\!\left[
+g_i^{\mathrm{pair}}=p_i^{\mathrm{pair}}
+\right].
+\]
 
 \begin{table}[htbp]
 \centering

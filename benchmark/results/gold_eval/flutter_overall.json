@@ -1,0 +1,25 @@
+{
+  "task": "gold_eval_aggregate",
+  "runtime": "flutter_kiwi_nlp",
+  "platform": "macos",
+  "dataset_name": "combined",
+  "source_datasets": [
+    "gold_eval_web_ko",
+    "gold_eval_written_ko"
+  ],
+  "sentence_count": 191,
+  "gold_token_count": 7990,
+  "predicted_token_count": 8076,
+  "init_ms_mean": 1483.47,
+  "eval_elapsed_ms": 246.434,
+  "token_edit_distance": 943,
+  "token_edit_denominator": 8124,
+  "token_agreement": 0.8839241752831117,
+  "pos_edit_distance": 1227,
+  "pos_edit_denominator": 8124,
+  "pos_agreement": 0.8489660265878878,
+  "token_sequence_exact_count": 7,
+  "token_sequence_exact_match": 0.03664921465968586,
+  "sentence_exact_count": 3,
+  "sentence_exact_match": 0.015706806282722512
+}

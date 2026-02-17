@@ -1,0 +1,695 @@
+flutter_kiwi_nlp: A Native-First, Cross-Platform Korean NLP Plugin for Flutter
+arXiv-style Technical Report
+
+Jai-Chang Park
+
+Date: February 17, 2026
+Repository: https://github.com/JAICHANGPARK/flutter_kiwi_nlp
+Package: https://pub.dev/packages/flutter_kiwi_nlp
+
+==============================================================================
+Abstract
+==============================================================================
+
+This technical report presents flutter_kiwi_nlp, a cross-platform Flutter
+plugin for Korean morphological analysis that unifies native Kiwi C API
+execution and web kiwi-nlp WASM execution behind a single Dart API. The
+plugin targets Android, iOS, macOS, Linux, Windows, and Web, and emphasizes
+implementation parity, deterministic model loading behavior, operational
+resilience, and developer ergonomics.
+
+The core API contract is intentionally minimal: create, analyze, addUserWord,
+close, and nativeVersion. Under this small interface, the implementation
+contains non-trivial runtime mechanics: dynamic native library loading,
+thread-local native error handling, fallback model asset extraction,
+on-demand archive download with checksum verification, JavaScript promise
+bridging in Dart web interop, model archive extraction in browser runtime,
+and platform-specific auto-build hooks that synthesize missing native binaries
+at build time.
+
+This report documents architecture, runtime algorithms, build pipelines,
+configuration points, failure surfaces, benchmark methodology, and trade-offs.
+It includes code-level explanations and practical operational guidance for
+users and maintainers. The intent is to provide publication-grade technical
+documentation that supports both academic understanding and production usage.
+
+Keywords: Flutter plugin, Korean NLP, morphological analysis, FFI, WASM,
+Kiwi, cross-platform systems, runtime parity.
+
+==============================================================================
+1. Introduction
+==============================================================================
+
+Korean morphological analysis is a foundational operation for tokenization,
+POS tagging, information retrieval, and downstream language processing tasks.
+In practice, application developers often require the same analysis capability
+across mobile, desktop, and web surfaces. Flutter enables a shared UI and
+application layer, but NLP runtimes remain platform-dependent.
+
+The design challenge for flutter_kiwi_nlp is therefore not only language
+analysis correctness but also systems integration correctness:
+
+1) identical high-level API semantics across heterogeneous runtimes,
+2) reliable model provisioning under offline, restricted, or partially
+   configured environments,
+3) practical build-time behavior that does not force users to manually build
+   every native artifact,
+4) transparent failure diagnostics when any stage fails.
+
+The plugin solves this by combining:
+
+- Native runtime: Dart FFI + a C bridge shared library + Kiwi dynamic library.
+- Web runtime: Dart JS interop + kiwi-nlp JavaScript/WASM module.
+- Uniform Dart surface with conditional exports.
+- Multiple model resolution and fallback strategies.
+- Platform build hooks that prepare missing Kiwi binaries automatically.
+
+==============================================================================
+2. Scope and Contributions
+==============================================================================
+
+2.1 Scope
+
+This report covers:
+
+- Public API design and parity contract.
+- Native runtime internals (Dart FFI and C bridge).
+- Web runtime internals (WASM module and JS bridge).
+- Model path resolution and fallback algorithms.
+- Build and packaging pipeline for all supported platforms.
+- Benchmark framework and current measured results.
+- Reliability, security, and operational considerations.
+
+2.2 Main Contributions
+
+C1. A stable, runtime-agnostic API for Korean morphological analysis in
+    Flutter apps.
+
+C2. Native and web runtime implementations that preserve behavior shape while
+    acknowledging backend-specific constraints.
+
+C3. Multi-layer model provisioning strategy:
+    explicit path -> asset path -> environment -> built-in asset candidates ->
+    archive fallback.
+
+C4. Automatic native artifact preparation for Android, iOS, macOS, Linux, and
+    Windows through build hooks and scripts.
+
+C5. Reproducible benchmark tooling comparing flutter_kiwi_nlp and kiwipiepy
+    with aligned warmup/measurement parameters.
+
+==============================================================================
+3. Public API and Parity Contract
+==============================================================================
+
+The public entry point is:
+
+- lib/flutter_kiwi_nlp.dart
+
+It conditionally exports one analyzer implementation:
+
+- native: lib/src/kiwi_analyzer_native.dart
+- web:    lib/src/kiwi_analyzer_web.dart
+- stub:   lib/src/kiwi_analyzer_stub.dart
+
+Core API:
+
+- Future<KiwiAnalyzer> KiwiAnalyzer.create(...)
+- String KiwiAnalyzer.nativeVersion
+- Future<KiwiAnalyzeResult> KiwiAnalyzer.analyze(...)
+- Future<void> KiwiAnalyzer.addUserWord(...)
+- Future<void> KiwiAnalyzer.close()
+
+Auxiliary public models:
+
+- KiwiAnalyzeResult, KiwiCandidate, KiwiToken
+- KiwiAnalyzeOptions
+- KiwiBuildOption, KiwiMatchOption
+- KiwiException
+
+Parity principles:
+
+- Method names and signatures are stable across runtimes.
+- Runtime failures are surfaced as KiwiException.
+- Use-after-close is rejected with explicit error messaging.
+- Output model shape is consistent: result -> candidates -> tokens.
+
+==============================================================================
+4. Native Runtime Architecture
+==============================================================================
+
+4.1 Layer Structure
+
+The native path has three layers:
+
+Layer A (Dart): KiwiAnalyzer in kiwi_analyzer_native.dart
+Layer B (bridge): flutter_kiwi_ffi shared library built from src/flutter_kiwi_ffi.c
+Layer C (engine): Kiwi dynamic library loaded by the bridge
+
+Dart never calls Kiwi symbols directly. Dart calls the bridge symbols generated
+by ffigen in lib/flutter_kiwi_ffi_bindings_generated.dart. The bridge then
+resolves Kiwi symbols dynamically.
+
+4.2 Native Bridge C ABI
+
+Bridge ABI is declared in src/flutter_kiwi_ffi.h and includes:
+
+- flutter_kiwi_ffi_init
+- flutter_kiwi_ffi_close
+- flutter_kiwi_ffi_analyze_json
+- flutter_kiwi_ffi_add_user_word
+- flutter_kiwi_ffi_free_string
+- flutter_kiwi_ffi_last_error
+- flutter_kiwi_ffi_version
+
+Design rationale:
+
+- Keep ABI minimal and language-neutral.
+- Return analysis as JSON to decouple Dart from Kiwi-internal structs.
+- Expose explicit string free to avoid allocator mismatch.
+
+4.3 Dynamic Library Resolution
+
+Dart-side bridge loading tries platform-specific candidates:
+
+- Apple: flutter_kiwi_nlp.framework/flutter_kiwi_nlp,
+         flutter_kiwi_ffi.framework/flutter_kiwi_ffi
+- Linux/Android: libflutter_kiwi_ffi.so, libflutter_kiwi_nlp.so
+- Windows: flutter_kiwi_ffi.dll, flutter_kiwi_nlp.dll
+
+Bridge-side Kiwi loading then resolves libkiwi candidates. It also supports
+explicit override through environment variables:
+
+- FLUTTER_KIWI_NLP_LIBRARY_PATH
+- legacy alias: FLUTTER_KIWI_FFI_LIBRARY_PATH
+
+If symbol resolution fails, the bridge captures detailed error state before
+returning control to Dart.
+
+4.4 Error Handling Model
+
+The bridge stores last error in a thread-local buffer and exposes
+flutter_kiwi_ffi_last_error(). Dart maps non-zero return codes or null handles
+into KiwiException instances.
+
+This design avoids silent failures and preserves actionable diagnostics without
+exposing internal C structures to Dart.
+
+4.5 Analyzer Lifecycle and Memory Ownership
+
+Creation flow:
+
+1) Dart resolves model path.
+2) Dart allocates UTF-8 path pointer.
+3) Bridge initializes Kiwi builder and analyzer handle.
+4) Dart frees temporary pointer.
+
+Analyze flow:
+
+1) Dart allocates UTF-8 input text.
+2) Bridge runs analysis and allocates JSON string.
+3) Dart decodes JSON into typed models.
+4) Dart calls flutter_kiwi_ffi_free_string.
+5) Dart frees input pointer.
+
+Close flow:
+
+- Dart calls bridge close.
+- bridge releases analyzer and builder resources.
+- Dart marks instance closed.
+
+4.6 Model Path Resolution (Native)
+
+Native create() resolves model path using strict priority:
+
+P1. modelPath argument
+P2. assetModelPath argument
+P3. FLUTTER_KIWI_NLP_MODEL_PATH (or legacy alias)
+P4. compile-time FLUTTER_KIWI_NLP_ASSET_MODEL_PATH
+P5. built-in asset candidates
+P6. default archive download + local cache
+
+Built-in candidates include package asset paths such as:
+
+- assets/kiwi-models/cong/base
+- packages/flutter_kiwi_nlp/assets/kiwi-models/cong/base
+
+When loading from assets, files are extracted into a temp cache directory.
+
+4.7 Archive Download and Integrity Checks
+
+If no path is resolved, native runtime attempts default archive download with:
+
+- configurable URL (compile-time define)
+- cache key (compile-time define)
+- optional SHA-256 checksum validation
+- retry on extraction failure by re-downloading archive
+- minimum file size checks per required model file
+
+Critical guards:
+
+- timeout protection (3-minute upper bound)
+- partial file strategy (.part rename)
+- verification before extraction completion is accepted
+
+4.8 Native Pseudocode
+
+--------------------------------------------------------------------------
+function create_native(modelPath, assetModelPath, numThreads, buildOpts):
+    path = resolve_model_path(modelPath, assetModelPath)
+    if path is empty:
+        throw KiwiException
+
+    handle = ffi_init(path, numThreads, buildOpts, matchOpts)
+    if handle == null:
+        throw KiwiException(last_error)
+
+    return KiwiAnalyzer(handle)
+--------------------------------------------------------------------------
+
+==============================================================================
+5. Web Runtime Architecture
+==============================================================================
+
+5.1 Module Loading
+
+Web runtime imports kiwi-nlp module URL from compile-time define:
+
+- FLUTTER_KIWI_NLP_WEB_MODULE_URL
+- default: jsdelivr kiwi-nlp index.js
+
+WASM URL is similarly configurable via FLUTTER_KIWI_NLP_WEB_WASM_URL.
+
+The loader supports promise-like JS values and maps rejections into
+KiwiException.
+
+5.2 Builder and API Bridge Modes
+
+The implementation supports two construction paths:
+
+Mode A: direct KiwiBuilder.build() returns a Kiwi object.
+Mode B: API bridge path (builder.api) with command-based calls and kiwi id.
+
+The code dynamically detects available capability and chooses the valid path.
+This reduces breakage when upstream web module behavior changes.
+
+5.3 Web Model Path and File Mapping
+
+Web create() normalizes model base path and generates a map:
+
+{ filename: "<base>/<filename>" }
+
+If `packages/...` style path is provided, it normalizes into web asset URL
+prefix (`assets/packages/...`).
+
+5.4 Web Fallback Strategy
+
+If URL-based model loading fails, the runtime falls back to archive download.
+It tries candidates in sequence:
+
+- explicit archive URL define (if set)
+- default release URL from repo/version/name defines
+- GitHub releases API lookup for the tagged asset
+
+Downloaded tgz bytes are decompressed in-memory and required files are
+extracted to Uint8List map. File completeness and minimum-size validation are
+applied before build retry.
+
+5.5 Web Checksum and Content Validation
+
+Optional SHA-256 validation can be enabled with compile-time define.
+Validation prevents accepting corrupted or tampered archive payloads.
+
+5.6 Runtime Semantics and Differences
+
+- analyze() returns same typed Dart models as native.
+- addUserWord() rebuilds web Kiwi instance with accumulated userWords.
+- create() accepts numThreads and matchOptions for signature parity but does
+  not apply them at web creation stage.
+
+==============================================================================
+6. Data Models, Options, and Type Safety
+==============================================================================
+
+6.1 Typed Result Models
+
+KiwiToken fields:
+
+- form, tag
+- start, length
+- wordPosition, sentPosition
+- score, typoCost
+
+KiwiCandidate:
+
+- probability
+- tokens: List<KiwiToken>
+
+KiwiAnalyzeResult:
+
+- candidates: List<KiwiCandidate>
+
+Native decode path consumes bridge JSON.
+Web decode path maps dartified JS objects.
+
+6.2 Build and Match Options
+
+KiwiBuildOption exposes bit flags for:
+
+- allomorph integration
+- default dictionary load
+- typo dictionary load
+- multi dictionary load
+- model type selection
+
+KiwiMatchOption exposes token-matching controls:
+
+- url, email, hashtag, mention, serial
+- normalizeCoda
+- join/split morphological preferences
+- baseline bundles: all, allWithNormalizing
+
+6.3 Null Safety and Defensive Defaults
+
+fromJson constructors provide defaults when keys are missing. This makes output
+parsing robust to minor payload variation while preserving type safety.
+
+==============================================================================
+7. Build and Packaging Pipeline by Platform
+==============================================================================
+
+7.1 Android
+
+Hook point: android/build.gradle
+
+- prepareKiwiAndroidLibs task runs before preBuild.
+- ABIs: arm64-v8a and x86_64.
+- Script: tool/build_android_libkiwi.sh
+- Behavior: skip if outputs already exist, otherwise build libkiwi.so.
+
+7.2 iOS
+
+Hook point: ios/flutter_kiwi_nlp.podspec (prepare_command)
+
+- Script: tool/build_ios_kiwi_xcframework.sh
+- Produces: ios/Frameworks/Kiwi.xcframework
+- Includes device and simulator slices in one xcframework.
+
+7.3 macOS
+
+Hook point: macos/flutter_kiwi_nlp.podspec (prepare_command)
+
+- Script: tool/build_macos_kiwi_dylib.sh
+- Produces: macos/Frameworks/libkiwi.dylib
+- Supports arm64 and x86_64, merges via lipo when required.
+
+7.4 Linux
+
+Hook point: linux/CMakeLists.txt
+
+- Custom target prepare_kiwi_linux_lib.
+- Script: tool/build_linux_libkiwi.sh
+- Output bundled: linux/prebuilt/libkiwi.so
+- Strategy: prefer official prebuilt asset, fallback to source build.
+
+7.5 Windows
+
+Hook point: windows/CMakeLists.txt
+
+- Custom target prepare_kiwi_windows_dll.
+- Script: tool/build_windows_kiwi_dll.ps1
+- Output bundled: windows/prebuilt/kiwi.dll
+- Strategy: prebuilt-first with source fallback.
+
+7.6 Shared Bridge Library
+
+src/CMakeLists.txt builds flutter_kiwi_ffi shared library and links platform
+requirements (e.g., dl on Linux). Android sets linker option for 16k page-size
+compatibility.
+
+==============================================================================
+8. Configuration Surfaces
+==============================================================================
+
+8.1 Native Runtime Configuration
+
+Important keys:
+
+- FLUTTER_KIWI_NLP_MODEL_PATH
+- FLUTTER_KIWI_NLP_ASSET_MODEL_PATH
+- FLUTTER_KIWI_NLP_MODEL_ARCHIVE_URL
+- FLUTTER_KIWI_NLP_MODEL_ARCHIVE_SHA256
+- FLUTTER_KIWI_NLP_MODEL_CACHE_KEY
+- FLUTTER_KIWI_NLP_LIBRARY_PATH
+
+Legacy FLUTTER_KIWI_FFI_* aliases remain supported for compatibility.
+
+8.2 Web Runtime Configuration
+
+- FLUTTER_KIWI_NLP_WEB_MODULE_URL
+- FLUTTER_KIWI_NLP_WEB_WASM_URL
+- FLUTTER_KIWI_NLP_WEB_MODEL_BASE_URL
+- FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_URL
+- FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_SHA256
+- FLUTTER_KIWI_NLP_WEB_MODEL_GITHUB_REPO
+- FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_VERSION
+- FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_NAME
+
+==============================================================================
+9. Reliability and Failure Surfaces
+==============================================================================
+
+9.1 Primary Failure Modes
+
+F1. Native bridge shared library not loadable.
+F2. Kiwi dynamic library not found or missing symbol.
+F3. Model path unresolved and download unavailable.
+F4. Download timeout, HTTP non-200, or checksum mismatch.
+F5. Corrupted archive or incomplete model file set.
+F6. Web module import failure or promise rejection.
+F7. API usage after close.
+
+9.2 Mitigations Implemented
+
+- Ordered candidate loading with aggregated errors.
+- Thread-local last-error transport from bridge.
+- Retry logic for archive re-download after extraction failure.
+- Strict minimum-size checks for model files.
+- Explicit close-state assertions.
+- Rich error messages that suggest remediation.
+
+==============================================================================
+10. Benchmark Methodology and Results
+==============================================================================
+
+10.1 Toolchain
+
+Scripts:
+
+- tool/benchmark/run_compare.py
+- tool/benchmark/kiwipiepy_benchmark.py
+- tool/benchmark/compare_results.py
+
+Flutter benchmark entrypoint:
+
+- example/lib/benchmark_main.dart
+
+10.2 Method Summary
+
+- Shared corpus: example/assets/benchmark_corpus_ko.txt
+- Warmup: 3 runs
+- Measurement: 15 runs
+- top_n: 1
+- Report outputs JSON payloads and markdown comparison table
+
+10.3 Observed Result Snapshot (macOS)
+
+From benchmark/results/comparison.md:
+
+- Init time (ms): flutter_kiwi_nlp 1315.84 vs kiwipiepy 615.45
+- Throughput analyses/s: 2600.33 vs 3659.41
+- Throughput chars/s: 88151.17 vs 124054.08
+- Throughput tokens/s: 41865.30 vs 58825.05
+- Avg latency (ms): 0.38 vs 0.27
+- Avg token latency (us/token): 23.89 vs 17.00
+
+Interpretation:
+
+- The plugin prioritizes broad runtime portability and packaging automation.
+- Python-native kiwipiepy is faster in this benchmark snapshot.
+- For production decisions, users should rerun comparison on target hardware,
+  build mode, and corpus.
+
+==============================================================================
+11. Security and Integrity Considerations
+==============================================================================
+
+11.1 Archive Verification
+
+Checksum hooks are available for native and web archive fallback, enabling
+supply-chain hardening when compile-time checksums are provided.
+
+11.2 Dynamic Loading Exposure
+
+Dynamic library path overrides are powerful for controlled deployments but can
+be risky if untrusted environment variables are injected. Production setups
+should constrain runtime environment manipulation.
+
+11.3 Failure Transparency
+
+The plugin favors explicit failure over silent fallback to avoid hidden
+incorrect execution. This is aligned with high-assurance runtime behavior.
+
+==============================================================================
+12. Maintainability and Evolution
+==============================================================================
+
+12.1 Code Organization
+
+- Public API and models are concise.
+- Native and web implementations are isolated by conditional export.
+- Shared model-file metadata moved to kiwi_model_assets.dart.
+
+12.2 Documentation and Tooling
+
+Repository includes:
+
+- multilingual README files,
+- benchmark scripts and artifacts,
+- AI skill references,
+- generated API docs via dart doc.
+
+12.3 CI and Operational Readiness
+
+Desktop CI build matrix and verbose build logs support reproducibility and
+faster diagnosis of platform-specific regressions.
+
+==============================================================================
+13. Limitations
+==============================================================================
+
+L1. Web depends on external module and WASM availability unless self-hosted.
+
+L2. Native fallback download assumes network and write access to temporary
+    cache location.
+
+L3. Performance parity with Python-native execution is not guaranteed.
+
+L4. Unsupported platforms (e.g., Fuchsia) currently rely on stub behavior.
+
+==============================================================================
+14. Future Work
+==============================================================================
+
+R1. Optional persistent on-device model cache policy controls.
+
+R2. More granular metrics instrumentation (phase-level timing in analyze path).
+
+R3. Expanded model family support with documented compatibility matrix.
+
+R4. Additional deterministic test fixtures for edge-tokenization cases.
+
+R5. Optional synchronous batch analyze interface for high-throughput workloads.
+
+==============================================================================
+15. Conclusion
+==============================================================================
+
+flutter_kiwi_nlp demonstrates a pragmatic systems architecture for delivering
+Korean NLP in Flutter across six major runtime classes. Its key engineering
+value lies not in exposing every backend capability directly, but in
+establishing a robust, stable, and debuggable contract for application
+engineers.
+
+The plugin combines API minimalism with operational sophistication:
+
+- dynamic native and web runtime integration,
+- deterministic model resolution with fallback tiers,
+- automated native artifact preparation for platform builds,
+- consistent typed outputs and exception semantics,
+- reproducible benchmark tooling.
+
+For teams building multilingual or Korean-first products in Flutter, this
+architecture substantially reduces integration complexity while preserving
+control points required for production deployment.
+
+==============================================================================
+References
+==============================================================================
+
+[1] flutter_kiwi_nlp repository:
+    https://github.com/JAICHANGPARK/flutter_kiwi_nlp
+
+[2] Kiwi repository:
+    https://github.com/bab2min/Kiwi
+
+[3] kiwi-nlp npm package:
+    https://www.npmjs.com/package/kiwi-nlp
+
+[4] Flutter FFI documentation:
+    https://docs.flutter.dev/platform-integration/ffi
+
+[5] Dart JS interop documentation:
+    https://dart.dev/interop/js-interop
+
+[6] Benchmark snapshot file in repository:
+    benchmark/results/comparison.md
+
+==============================================================================
+Appendix A. Core API Snippet
+==============================================================================
+
+```dart
+final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+  numThreads: -1,
+  buildOptions: KiwiBuildOption.defaultOption,
+  matchOptions: KiwiMatchOption.allWithNormalizing,
+);
+
+final KiwiAnalyzeResult result = await analyzer.analyze(
+  'sample sentence for analysis',
+  options: const KiwiAnalyzeOptions(topN: 1),
+);
+
+await analyzer.addUserWord('newword', tag: 'NNP', score: 1.0);
+await analyzer.close();
+```
+
+==============================================================================
+Appendix B. Native Model Resolution Pseudocode
+==============================================================================
+
+```text
+resolveModelPath(modelPath, assetModelPath):
+  if modelPath is non-empty: return modelPath
+  if assetModelPath is non-empty: return extractAssets(assetModelPath)
+  if env MODEL_PATH is non-empty: return env MODEL_PATH
+  if compile-time ASSET_MODEL_PATH non-empty:
+       return extractAssets(compile-time ASSET_MODEL_PATH)
+  for candidate in builtInAssetCandidates:
+       if assetExists(candidate): return extractAssets(candidate)
+  return ensureDownloadedModel()
+```
+
+==============================================================================
+Appendix C. Web Fallback Sequence
+==============================================================================
+
+```text
+createWebAnalyzer():
+  try build with URL-based modelFiles
+  if build fails and model base is fallback-eligible:
+      download archive bytes
+      verify checksum if configured
+      extract required files into memory map
+      validate completeness and minimum file sizes
+      retry build with in-memory model files
+```
+
+==============================================================================
+Reproducibility Note
+==============================================================================
+
+This report was prepared from repository state available on February 17, 2026.
+Implementation details, defaults, and benchmark values may evolve in future
+releases.
