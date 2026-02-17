@@ -1,3 +1,9 @@
+## 0.1.2
+
+* Exclude repository root `benchmark/` artifacts from pub.dev uploads by
+  adding `benchmark/.pubignore`.
+* Bump package version to `0.1.2`.
+
 ## 0.1.1
 
 * Add cross-runtime benchmark tooling for `flutter_kiwi_nlp` vs `kiwipiepy`:

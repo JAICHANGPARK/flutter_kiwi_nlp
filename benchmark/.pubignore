@@ -1,0 +1,2 @@
+# Exclude benchmark artifacts from pub.dev package uploads.
+*
