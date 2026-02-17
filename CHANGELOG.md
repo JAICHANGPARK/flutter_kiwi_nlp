@@ -1,3 +1,16 @@
+## 0.0.2
+
+* Fix macOS prepare script for Bash 3.2 `set -u` empty-array handling.
+* Fix Linux desktop build failure caused by `Digest` import conflict in
+  `kiwi_analyzer_native.dart`.
+* Improve Linux/Windows native library preparation to try official Kiwi
+  release prebuilts first, then fallback to source build.
+* Improve Windows failure visibility in the build script with explicit
+  error output.
+* Run desktop CI builds with verbose logging (`flutter build -v`) to
+  make platform failure diagnosis easier.
+* Update docs for platform auto-prepare behavior and install version.
+
 ## 0.0.1
 
 * Bootstrap a native-first Flutter FFI plugin structure for Kiwi.

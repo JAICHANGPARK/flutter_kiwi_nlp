@@ -137,7 +137,7 @@ Or edit `pubspec.yaml` directly:
 
 ```yaml
 dependencies:
-  flutter_kiwi_nlp: ^0.0.1
+  flutter_kiwi_nlp: ^0.0.2
 ```
 
 ```bash

@@ -136,7 +136,7 @@ flutter pub add flutter_kiwi_nlp
 
 ```yaml
 dependencies:
-  flutter_kiwi_nlp: ^0.0.1
+  flutter_kiwi_nlp: ^0.0.2
 ```
 
 ```bash
