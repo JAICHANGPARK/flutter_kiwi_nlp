@@ -5,7 +5,7 @@ import 'dart:isolate';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
-import 'package:crypto/crypto.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -441,7 +441,9 @@ class KiwiAnalyzer {
     if (expected.isEmpty) {
       return;
     }
-    final Digest digest = await sha256.bind(archiveFile.openRead()).first;
+    final crypto.Digest digest = await crypto.sha256
+        .bind(archiveFile.openRead())
+        .first;
     final String actual = digest.toString().toLowerCase();
     if (actual != expected) {
       throw KiwiException(
