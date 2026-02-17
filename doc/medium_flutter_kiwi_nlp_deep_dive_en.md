@@ -42,10 +42,37 @@ This article goes beyond a basic quickstart and covers:
 
 ---
 
+## Why We Built This Plugin
+
+The original motivation was simple: we needed a practical way to run Korean
+morphological analysis directly inside Flutter apps.
+
+We specifically needed a Korean morphological analyzer for on-device AI
+workflows, and there was effectively no production-friendly Flutter package for
+Kiwi at the time. That is why we decided to build a cross-platform plugin.
+
+The repeated pain points were:
+
+- many references were Python-centric and hard to apply directly in Flutter,
+- supporting Android/iOS/desktop/web separately increased implementation cost,
+- model path/deployment/init failures slowed down real-world delivery,
+- teams lacked a reproducible validation path across option sets and runtimes.
+
+So we set explicit goals:
+
+1. make `KiwiAnalyzer.create()` usable as a default happy path,
+2. keep API parity between native and web,
+3. include model-path/download/asset fallback for operational reliability,
+4. make performance discussions evidence-based with benchmark automation.
+
+---
+
 ## AI User Guide (LLMs + Skills)
 
 This project is significantly easier to operate when you drive changes with an
 AI coding assistant using repository-specific context.
+For users actively building with AI today, we also provide workspace `skills`
+to make this package easier to use.
 
 Recommended references:
 
@@ -56,6 +83,63 @@ Recommended references:
 - runtime/build reference:
   `skills/flutter-kiwi-nlp/references/runtime-and-build.md`
 - verification script: `skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`
+
+### How To Use Skills In This Workspace
+
+The most reliable flow in this workspace is:
+
+1. explicitly invoke the skill in the first line of the prompt,
+2. provide both goal and constraints,
+3. define validation scope (`analyze`/`test`/`benchmark`),
+4. require a concrete output report (files changed, key diff, validation
+   results).
+
+Base invocation pattern:
+
+```text
+Use $flutter-kiwi-nlp to implement and validate this change.
+```
+
+Feature-request template:
+
+```text
+Use $flutter-kiwi-nlp to implement and validate this change.
+
+Task:
+- Add [feature name] to the plugin/example app.
+- Keep native/web API parity.
+
+Constraints:
+- Do not break existing benchmark scripts under tool/benchmark.
+- Keep public API backward compatible unless explicitly noted.
+
+Validation:
+- Run flutter analyze (root + example).
+- Run example tests.
+- Run ./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh.
+```
+
+Docs/benchmark-refresh template:
+
+```text
+Use $flutter-kiwi-nlp to update docs and benchmark artifacts.
+
+Task:
+- Re-run benchmark comparison and refresh markdown/json outputs.
+- Update README sections that reference benchmark workflow.
+
+Report:
+- List updated files.
+- Include benchmark delta summary.
+```
+
+Extra tips:
+
+- Ask the AI to read `skills/flutter-kiwi-nlp/SKILL.md` first.
+- For API-sensitive changes, require evidence from
+  `skills/flutter-kiwi-nlp/references/api-surface.md`.
+- For runtime/build issues, require checks against
+  `skills/flutter-kiwi-nlp/references/runtime-and-build.md`.
 
 Prompt template you can paste into an AI assistant:
 
@@ -79,6 +163,67 @@ Execution tips:
 - require file-level evidence for decisions,
 - include benchmark-path validation (`tool/benchmark/`) in every change request,
 - attach generated benchmark artifacts to PR descriptions.
+
+---
+
+## Devlog: What We Actually Had To Solve
+
+To keep this article closer to a real build log than a generic tutorial, here
+is the repeated pattern we saw in practice: problem -> decision -> outcome.
+
+### 1) Starting point: one API, many platforms
+
+The first goal was to keep the API surface minimal and stable:
+
+- `create`, `analyze`, `addUserWord`, `close`,
+- typed result models (`KiwiAnalyzeResult`, `KiwiCandidate`, `KiwiToken`),
+- explicit failure with `KiwiException` on unsupported or invalid paths.
+
+This made product code focus on domain logic instead of runtime branching.
+
+### 2) Hardest practical issue: model-path handling
+
+Many production failures were model-path related. Small path differences caused
+init failures and made bugs difficult to reproduce across environments.
+
+So model loading was designed as layered fallback:
+
+- use explicit `modelPath` when provided,
+- try bundled asset-model paths,
+- fallback to default model download/cache when needed.
+
+The goal was to avoid "works only if every path is perfectly configured."
+
+### 3) Multi-platform reality: delivery automation matters
+
+In practice, deployment plumbing consumed more time than core analysis logic:
+
+- macOS: prepare artifacts during `pod install`,
+- Linux/Windows: prepare native libraries in build steps,
+- Android: ABI-aware library packaging and build paths,
+- Web: fallback when WASM/module/model URL loading fails.
+
+We handled this with scripts/build hooks/auto-prepare paths to reduce failure
+cost during integration.
+
+### 4) AI collaboration upgrades
+
+As the package evolved, we needed consistent AI execution quality, not only good
+documentation. So we shipped both docs and skills together:
+
+- `llms.txt` for quick repo-context injection,
+- `skills/flutter-kiwi-nlp/SKILL.md` for a standard workflow,
+- API/runtime references plus verification scripts.
+
+The target outcome is one-prompt consistency for implement + validate + report.
+
+### 5) Performance discussions based on data
+
+"Feels faster" is not enough in team reviews. We added benchmark scripts to
+generate reproducible artifacts for both runtimes and one final comparison
+report.
+
+That made PR performance conversations objective and repeatable.
 
 ---
 
