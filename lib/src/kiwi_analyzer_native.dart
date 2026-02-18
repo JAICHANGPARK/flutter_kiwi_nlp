@@ -40,12 +40,39 @@ abstract interface class KiwiNativeBindings {
     int matchOptions,
   );
 
+  Pointer<Char> flutter_kiwi_ffi_analyze_json_batch(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> texts,
+    int textCount,
+    int topN,
+    int matchOptions,
+  );
+
   int flutter_kiwi_ffi_analyze_token_count(
     Pointer<flutter_kiwi_ffi_handle_t> handle,
     Pointer<Char> text,
     int topN,
     int matchOptions,
     Pointer<Int32> outTokenCount,
+  );
+
+  int flutter_kiwi_ffi_analyze_token_count_batch(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> texts,
+    int textCount,
+    int topN,
+    int matchOptions,
+    Pointer<Int32> outTokenCounts,
+  );
+
+  int flutter_kiwi_ffi_analyze_token_count_batch_runs(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> texts,
+    int textCount,
+    int runs,
+    int topN,
+    int matchOptions,
+    Pointer<Int64> outTotalTokens,
   );
 
   int flutter_kiwi_ffi_add_user_word(
@@ -80,6 +107,23 @@ class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
       modelPath,
       numThreads,
       buildOptions,
+      matchOptions,
+    );
+  }
+
+  @override
+  Pointer<Char> flutter_kiwi_ffi_analyze_json_batch(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> texts,
+    int textCount,
+    int topN,
+    int matchOptions,
+  ) {
+    return _bindings.flutter_kiwi_ffi_analyze_json_batch(
+      handle,
+      texts,
+      textCount,
+      topN,
       matchOptions,
     );
   }
@@ -122,6 +166,46 @@ class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
   }
 
   @override
+  int flutter_kiwi_ffi_analyze_token_count_batch(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> texts,
+    int textCount,
+    int topN,
+    int matchOptions,
+    Pointer<Int32> outTokenCounts,
+  ) {
+    return _bindings.flutter_kiwi_ffi_analyze_token_count_batch(
+      handle,
+      texts,
+      textCount,
+      topN,
+      matchOptions,
+      outTokenCounts,
+    );
+  }
+
+  @override
+  int flutter_kiwi_ffi_analyze_token_count_batch_runs(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> texts,
+    int textCount,
+    int runs,
+    int topN,
+    int matchOptions,
+    Pointer<Int64> outTotalTokens,
+  ) {
+    return _bindings.flutter_kiwi_ffi_analyze_token_count_batch_runs(
+      handle,
+      texts,
+      textCount,
+      runs,
+      topN,
+      matchOptions,
+      outTotalTokens,
+    );
+  }
+
+  @override
   int flutter_kiwi_ffi_add_user_word(
     Pointer<flutter_kiwi_ffi_handle_t> handle,
     Pointer<Char> word,
@@ -148,7 +232,7 @@ class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
 }
 
 KiwiNativeBindings _createDefaultKiwiNativeBindings() {
-  final DynamicLibrary dynamicLibrary = _openPluginDynamicLibrary();
+  final DynamicLibrary dynamicLibrary = _kiwiDynamicLibraryOpenerForTest();
   return GeneratedKiwiNativeBindings(FlutterKiwiFfiBindings(dynamicLibrary));
 }
 
@@ -158,6 +242,15 @@ String? _kiwiNativeArchiveUrlOverrideForTest;
 String? _kiwiNativeArchiveSha256OverrideForTest;
 HttpClient Function() _kiwiHttpClientFactory = HttpClient.new;
 String? _lastOpenedNativeLibraryCandidateForTest;
+List<String> Function() _kiwiNativeLibraryCandidatesProviderForTest =
+    _nativeLibraryCandidatesForCurrentPlatform;
+String? _kiwiDefaultAssetModelPathOverrideForTest;
+List<String>? _kiwiAutoAssetModelPathsOverrideForTest;
+Future<String?> Function({String? modelPath, String? assetModelPath})?
+_kiwiResolveModelPathOverrideForTest;
+Duration? _kiwiModelPreparationTimeoutOverrideForTest;
+DynamicLibrary Function() _kiwiDynamicLibraryOpenerForTest =
+    _openPluginDynamicLibrary;
 
 /// Overrides native binding creation for tests.
 void debugSetKiwiNativeBindingsFactoryForTest(
@@ -182,9 +275,47 @@ void debugSetKiwiNativeHttpClientFactoryForTest(
   _kiwiHttpClientFactory = factory ?? HttpClient.new;
 }
 
+/// Overrides native library load candidates for tests.
+void debugSetKiwiNativeLibraryCandidatesProviderForTest(
+  List<String> Function()? provider,
+) {
+  _kiwiNativeLibraryCandidatesProviderForTest =
+      provider ?? _nativeLibraryCandidatesForCurrentPlatform;
+}
+
+/// Overrides the compile-time default asset model path for tests.
+void debugSetKiwiNativeDefaultAssetModelPathForTest(String? assetModelPath) {
+  _kiwiDefaultAssetModelPathOverrideForTest = assetModelPath;
+}
+
+/// Overrides auto-detected model asset candidate paths for tests.
+void debugSetKiwiNativeAutoAssetModelPathsForTest(List<String>? assetPaths) {
+  _kiwiAutoAssetModelPathsOverrideForTest = assetPaths;
+}
+
+/// Overrides model path resolution logic for tests.
+void debugSetKiwiNativeResolveModelPathForTest(
+  Future<String?> Function({String? modelPath, String? assetModelPath})?
+  resolver,
+) {
+  _kiwiResolveModelPathOverrideForTest = resolver;
+}
+
+/// Overrides default model preparation timeout for tests.
+void debugSetKiwiNativeModelPreparationTimeoutForTest(Duration? timeout) {
+  _kiwiModelPreparationTimeoutOverrideForTest = timeout;
+}
+
+/// Overrides native dynamic library open behavior for tests.
+void debugSetKiwiNativeDynamicLibraryOpenerForTest(
+  DynamicLibrary Function()? opener,
+) {
+  _kiwiDynamicLibraryOpenerForTest = opener ?? _openPluginDynamicLibrary;
+}
+
 /// Returns native dynamic library load candidates for the current platform.
 List<String> debugKiwiNativeLibraryCandidatesForTest() {
-  return _nativeLibraryCandidatesForCurrentPlatform();
+  return _kiwiNativeLibraryCandidatesProviderForTest();
 }
 
 /// Returns the last candidate that successfully loaded in this isolate.
@@ -200,8 +331,16 @@ String _effectiveDefaultModelArchiveSha256() {
   return _kiwiNativeArchiveSha256OverrideForTest ?? _defaultModelArchiveSha256;
 }
 
+String _effectiveDefaultAssetModelPath() {
+  return _kiwiDefaultAssetModelPathOverrideForTest ?? _defaultAssetModelPath;
+}
+
+List<String> _effectiveAutoAssetModelPaths() {
+  return _kiwiAutoAssetModelPathsOverrideForTest ?? _autoAssetModelPaths;
+}
+
 DynamicLibrary _openPluginDynamicLibrary() {
-  final List<String> candidates = _nativeLibraryCandidatesForCurrentPlatform();
+  final List<String> candidates = _kiwiNativeLibraryCandidatesProviderForTest();
   if (candidates.isEmpty) {
     throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
   }
@@ -311,7 +450,10 @@ class KiwiAnalyzer {
     int buildOptions = KiwiBuildOption.defaultOption,
     int matchOptions = KiwiMatchOption.allWithNormalizing,
   }) async {
-    final String? resolvedModelPath = await _resolveModelPath(
+    final Future<String?> Function({String? modelPath, String? assetModelPath})
+    resolveModelPath =
+        _kiwiResolveModelPathOverrideForTest ?? _resolveModelPath;
+    final String? resolvedModelPath = await resolveModelPath(
       modelPath: modelPath,
       assetModelPath: assetModelPath,
     );
@@ -393,6 +535,81 @@ class KiwiAnalyzer {
     }
   }
 
+  /// Analyzes [texts] and returns results in input order.
+  ///
+  /// This batches native calls to reduce FFI boundary and JSON decode overhead.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<List<KiwiAnalyzeResult>> analyzeBatch(
+    List<String> texts, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _assertOpen();
+    if (texts.isEmpty) {
+      return const <KiwiAnalyzeResult>[];
+    }
+
+    final int textCount = texts.length;
+    final Pointer<Pointer<Char>> textPointers = malloc<Pointer<Char>>(
+      textCount,
+    );
+    final List<Pointer<Utf8>> allocated = <Pointer<Utf8>>[];
+
+    try {
+      for (int index = 0; index < textCount; index += 1) {
+        final Pointer<Utf8> textPtr = texts[index].toNativeUtf8(
+          allocator: malloc,
+        );
+        allocated.add(textPtr);
+        textPointers[index] = textPtr.cast<Char>();
+      }
+
+      final Pointer<Char> raw = _bindings.flutter_kiwi_ffi_analyze_json_batch(
+        _handle,
+        textPointers,
+        textCount,
+        options.topN,
+        options.matchOptions,
+      );
+      if (raw == nullptr) {
+        throw KiwiException(_readLastError(_bindings));
+      }
+
+      try {
+        final String jsonText = raw.cast<Utf8>().toDartString();
+        final dynamic decoded = jsonDecode(jsonText);
+        if (decoded is! Map<String, dynamic>) {
+          throw const KiwiException('Unexpected analyze batch payload.');
+        }
+        final dynamic rawResults = decoded['results'];
+        if (rawResults is! List<dynamic>) {
+          throw const KiwiException('Unexpected analyze batch payload.');
+        }
+
+        final List<KiwiAnalyzeResult> results = rawResults
+            .map((dynamic item) {
+              if (item is! Map<String, dynamic>) {
+                throw const KiwiException('Unexpected analyze batch payload.');
+              }
+              return KiwiAnalyzeResult.fromJson(item);
+            })
+            .toList(growable: false);
+
+        if (results.length != textCount) {
+          throw const KiwiException('Unexpected analyze batch payload.');
+        }
+        return results;
+      } finally {
+        _bindings.flutter_kiwi_ffi_free_string(raw);
+      }
+    } finally {
+      for (final Pointer<Utf8> pointer in allocated) {
+        malloc.free(pointer);
+      }
+      malloc.free(textPointers);
+    }
+  }
+
   /// Analyzes [text] and returns the first-candidate token count.
   ///
   /// This avoids JSON materialization and is intended for performance
@@ -421,6 +638,119 @@ class KiwiAnalyzer {
     } finally {
       malloc.free(textPtr);
       malloc.free(outTokenCount);
+    }
+  }
+
+  /// Analyzes [texts] and returns first-candidate token counts in order.
+  ///
+  /// This batches native calls to reduce FFI boundary overhead.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<List<int>> analyzeTokenCountBatch(
+    List<String> texts, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _assertOpen();
+    if (texts.isEmpty) {
+      return const <int>[];
+    }
+
+    final int textCount = texts.length;
+    final Pointer<Pointer<Char>> textPointers = malloc<Pointer<Char>>(
+      textCount,
+    );
+    final Pointer<Int32> outTokenCounts = malloc<Int32>(textCount);
+    final List<Pointer<Utf8>> allocated = <Pointer<Utf8>>[];
+
+    try {
+      for (int index = 0; index < textCount; index += 1) {
+        final Pointer<Utf8> textPtr = texts[index].toNativeUtf8(
+          allocator: malloc,
+        );
+        allocated.add(textPtr);
+        textPointers[index] = textPtr.cast<Char>();
+      }
+
+      final int status = _bindings.flutter_kiwi_ffi_analyze_token_count_batch(
+        _handle,
+        textPointers,
+        textCount,
+        options.topN,
+        options.matchOptions,
+        outTokenCounts,
+      );
+      if (status != 0) {
+        throw KiwiException(_readLastError(_bindings));
+      }
+
+      return List<int>.generate(
+        textCount,
+        (int index) => outTokenCounts[index],
+        growable: false,
+      );
+    } finally {
+      for (final Pointer<Utf8> pointer in allocated) {
+        malloc.free(pointer);
+      }
+      malloc.free(textPointers);
+      malloc.free(outTokenCounts);
+    }
+  }
+
+  /// Repeats batch analysis [runs] times and returns summed token counts.
+  ///
+  /// This is optimized for throughput benchmarks by reusing encoded inputs.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<int> analyzeTokenCountBatchRepeated(
+    List<String> texts, {
+    int runs = 1,
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _assertOpen();
+    if (runs < 0) {
+      throw const KiwiException('runs must be >= 0.');
+    }
+    if (texts.isEmpty || runs == 0) {
+      return 0;
+    }
+
+    final int textCount = texts.length;
+    final Pointer<Pointer<Char>> textPointers = malloc<Pointer<Char>>(
+      textCount,
+    );
+    final Pointer<Int64> outTotalTokens = malloc<Int64>(1);
+    final List<Pointer<Utf8>> allocated = <Pointer<Utf8>>[];
+
+    try {
+      for (int index = 0; index < textCount; index += 1) {
+        final Pointer<Utf8> textPtr = texts[index].toNativeUtf8(
+          allocator: malloc,
+        );
+        allocated.add(textPtr);
+        textPointers[index] = textPtr.cast<Char>();
+      }
+
+      final int status = _bindings
+          .flutter_kiwi_ffi_analyze_token_count_batch_runs(
+            _handle,
+            textPointers,
+            textCount,
+            runs,
+            options.topN,
+            options.matchOptions,
+            outTotalTokens,
+          );
+      if (status != 0) {
+        throw KiwiException(_readLastError(_bindings));
+      }
+      return outTotalTokens.value;
+    } finally {
+      for (final Pointer<Utf8> pointer in allocated) {
+        malloc.free(pointer);
+      }
+      malloc.free(textPointers);
+      malloc.free(outTotalTokens);
     }
   }
 
@@ -506,12 +836,12 @@ class KiwiAnalyzer {
       return envModelPath;
     }
 
-    final String definedAssetBase = _defaultAssetModelPath.trim();
+    final String definedAssetBase = _effectiveDefaultAssetModelPath().trim();
     if (definedAssetBase.isNotEmpty) {
       return _extractModelAssets(definedAssetBase);
     }
 
-    for (final String candidate in _autoAssetModelPaths) {
+    for (final String candidate in _effectiveAutoAssetModelPaths()) {
       if (await _assetModelExists(candidate)) {
         return _extractModelAssets(candidate);
       }
@@ -585,8 +915,11 @@ class KiwiAnalyzer {
   }
 
   static Future<String> _downloadDefaultModelIfNeeded() {
+    final Duration timeout =
+        _kiwiModelPreparationTimeoutOverrideForTest ??
+        const Duration(minutes: 3);
     return _downloadDefaultModelIfNeededImpl().timeout(
-      const Duration(minutes: 3),
+      timeout,
       onTimeout: () {
         throw const KiwiException(
           'Timed out while preparing default Kiwi model (3 minutes).',

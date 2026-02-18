@@ -1,3 +1,4 @@
+// Verifies end-to-end analyzer interactions in a mobile-sized demo viewport.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

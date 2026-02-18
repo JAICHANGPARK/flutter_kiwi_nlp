@@ -1,3 +1,9 @@
+## 0.1.3
+
+* Add pub.dev `screenshots` metadata in `pubspec.yaml` using files under
+  `doc/` so package pages can display plugin screenshots.
+* Bump package version to `0.1.3`.
+
 ## 0.1.2
 
 * Exclude repository root `benchmark/` artifacts from pub.dev uploads by

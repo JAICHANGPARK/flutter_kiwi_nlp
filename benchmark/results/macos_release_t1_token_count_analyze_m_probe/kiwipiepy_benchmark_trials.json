@@ -1,0 +1,81 @@
+[
+  {
+    "runtime": "kiwipiepy",
+    "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+    "generated_at_utc": "2026-02-18T02:38:12Z",
+    "warmup_runs": 3,
+    "measure_runs": 15,
+    "top_n": 1,
+    "num_workers": -1,
+    "build_options": 1039,
+    "create_match_options": 8454175,
+    "analyze_match_options": 8454175,
+    "analyze_impl": "analyze",
+    "trial_id": 1,
+    "model_type": "cong",
+    "sentence_count": 40,
+    "sample_count": 10,
+    "init_ms": 860.551167000267,
+    "elapsed_ms": 222.65091700000994,
+    "total_analyses": 600,
+    "total_chars": 20340,
+    "total_tokens": 9645,
+    "analyses_per_sec": 2694.801387231534,
+    "chars_per_sec": 91353.76702714902,
+    "tokens_per_sec": 43318.93229974691,
+    "avg_latency_ms": 0.37108486166668325,
+    "avg_token_latency_us": 23.084594815967854,
+    "sample_outputs": [
+      {
+        "sentence": "오늘 회의는 오전 아홉 시에 시작하고 점심 전에 끝낼 예정입니다.",
+        "top1_text": "오늘/NNG 회의/NNG 는/JX 오전/NNG 아홉/NR 시/NNB 에/JKB 시작/NNG 하/XSV 고/EC 점심/NNG 전/NNG 에/JKB 끝내/VV ᆯ/ETM 예정/NNG 이/VCP ᆸ니다/EF ./SF",
+        "top1_token_count": 19
+      },
+      {
+        "sentence": "새로 배포한 앱에서 로그인 지연 이슈가 간헐적으로 보고되었습니다.",
+        "top1_text": "새로/MAG 배포/NNG 하/XSV ᆫ/ETM 앱/NNG 에서/JKB 로그인/NNG 지연/NNG 이슈/NNG 가/JKS 간헐/NNG 적/XSN 으로/JKB 보고/NNG 되/XSV 었/EP 습니다/EF ./SF",
+        "top1_token_count": 18
+      },
+      {
+        "sentence": "사용자 피드백을 반영해서 온보딩 문구를 더 짧게 수정했습니다.",
+        "top1_text": "사용자/NNG 피드백/NNG 을/JKO 반영/NNG 하/XSV 어서/EC 온/MM 보/NNG 딩/MAG 문구/NNG 를/JKO 더/MAG 짧/VA 게/EC 수정/NNG 하/XSV 었/EP 습니다/EF ./SF",
+        "top1_token_count": 19
+      },
+      {
+        "sentence": "이번 분기 목표는 검색 정확도 개선과 응답 속도 단축입니다.",
+        "top1_text": "이번/NNG 분기/NNG 목표/NNG 는/JX 검색/NNG 정확도/NNG 개선/NNG 과/JC 응답/NNG 속도/NNG 단축/NNG 이/VCP ᆸ니다/EF ./SF",
+        "top1_token_count": 14
+      },
+      {
+        "sentence": "문서 링크는 사내 위키에서 확인할 수 있습니다.",
+        "top1_text": "문서/NNG 링크/NNG 는/JX 사내/NNG 위키/NNP 에서/JKB 확인/NNG 하/XSV ᆯ/ETM 수/NNB 있/VA 습니다/EF ./SF",
+        "top1_token_count": 13
+      },
+      {
+        "sentence": "주문번호 ORD-2026-004219 상태를 조회해 주세요.",
+        "top1_text": "주문/NNG 번호/NNG ORD/SL -/SO 2026-004219/W_SERIAL 상태/NNG 를/JKO 조회/NNG 하/XSV 어/EC 주/VX 세요/EF ./SF",
+        "top1_token_count": 13
+      },
+      {
+        "sentence": "문의는 support@example.com 으로 보내 주시면 순차적으로 답변드립니다.",
+        "top1_text": "문의/NNG 는/JX support@example.com/W_EMAIL 으로/JKB 보내/VV 어/EC 주/VX 시/EP 면/EC 순차/NNG 적/XSN 으로/JKB 답변/NNG 드리/VV ᆸ니다/EF ./SF",
+        "top1_token_count": 16
+      },
+      {
+        "sentence": "OpenAI 업데이트 소식은 https://openai.com 에서 확인했습니다.",
+        "top1_text": "OpenAI/SL 업데이트/NNG 소식/NNG 은/JX https://openai.com/W_URL 에서/JKB 확인/NNG 하/XSV 었/EP 습니다/EF ./SF",
+        "top1_token_count": 11
+      },
+      {
+        "sentence": "#Flutter #NLP 해시태그가 포함된 게시글을 수집해 보겠습니다.",
+        "top1_text": "#Flutter/W_HASHTAG #NLP/W_HASHTAG 해시태그/NNG 가/JKS 포함/NNG 되/XSV ᆫ/ETM 게시/NNG 글/NNG 을/JKO 수집/NNG 하/XSV 어/EC 보/VX 겠/EP 습니다/EF ./SF",
+        "top1_token_count": 17
+      },
+      {
+        "sentence": "@product-team 오늘 데모 리허설 일정 공유 부탁드립니다.",
+        "top1_text": "@product-team/W_MENTION 오늘/MAG 데모/NNG 리허설/NNG 일정/NNG 공유/NNG 부탁/NNG 드리/VV ᆸ니다/EF ./SF",
+        "top1_token_count": 10
+      }
+    ]
+  }
+]

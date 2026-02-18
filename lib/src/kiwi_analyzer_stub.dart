@@ -44,11 +44,42 @@ class KiwiAnalyzer {
     _throwUnsupported();
   }
 
+  /// Analyzes [texts].
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
+  Future<List<KiwiAnalyzeResult>> analyzeBatch(
+    List<String> texts, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _throwUnsupported();
+  }
+
   /// Analyzes [text] and returns first-candidate token count.
   ///
   /// Throws a [KiwiException] on unsupported platforms.
   Future<int> analyzeTokenCount(
     String text, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _throwUnsupported();
+  }
+
+  /// Analyzes [texts] and returns first-candidate token counts in order.
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
+  Future<List<int>> analyzeTokenCountBatch(
+    List<String> texts, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _throwUnsupported();
+  }
+
+  /// Repeats batch analysis [runs] times and returns summed token counts.
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
+  Future<int> analyzeTokenCountBatchRepeated(
+    List<String> texts, {
+    int runs = 1,
     KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
   }) async {
     _throwUnsupported();

@@ -13,6 +13,7 @@ import 'package:flutter_kiwi_nlp/src/kiwi_analyzer_native.dart';
 import 'package:flutter_kiwi_nlp/src/kiwi_exception.dart';
 import 'package:flutter_kiwi_nlp/src/kiwi_model_assets.dart';
 import 'package:flutter_kiwi_nlp/src/kiwi_options.dart';
+import 'package:flutter_kiwi_nlp/src/kiwi_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Allocates a C string for fake native callbacks that return `char*`.
@@ -26,14 +27,20 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
       ffi.Pointer<flutter_kiwi_ffi_handle_t>.fromAddress(1);
   bool returnNullVersion = false;
   bool returnNullAnalyze = false;
+  bool returnNullAnalyzeBatch = false;
   bool returnNullLastError = false;
   int analyzeTokenCountStatus = 0;
   int analyzeTokenCountValue = 0;
+  int analyzeTokenCountBatchStatus = 0;
+  List<int> analyzeTokenCountBatchValues = const <int>[];
+  int analyzeTokenCountBatchRunsStatus = 0;
+  int analyzeTokenCountBatchRunsTotalTokens = 0;
   int addUserWordStatus = 0;
   int closeStatus = 0;
   String lastErrorText = 'fake-native-error';
   String versionText = '0.0.1-test';
   String analyzePayload = '{"candidates": []}';
+  String analyzeBatchPayload = '{"results": []}';
 
   int initCallCount = 0;
   int closeCallCount = 0;
@@ -45,9 +52,19 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   int? analyzeTopN;
   int? analyzeMatchOptions;
   String? analyzeText;
+  int? analyzeBatchTopN;
+  int? analyzeBatchMatchOptions;
+  List<String> analyzeBatchTexts = <String>[];
   int? analyzeTokenCountTopN;
   int? analyzeTokenCountMatchOptions;
   String? analyzeTokenCountText;
+  int? analyzeTokenCountBatchTopN;
+  int? analyzeTokenCountBatchMatchOptions;
+  List<String> analyzeTokenCountBatchTexts = <String>[];
+  int? analyzeTokenCountBatchRunsTopN;
+  int? analyzeTokenCountBatchRunsMatchOptions;
+  int? analyzeTokenCountBatchRunsRuns;
+  List<String> analyzeTokenCountBatchRunsTexts = <String>[];
   String? addWord;
   String? addTag;
   double? addScore;
@@ -94,6 +111,27 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   }
 
   @override
+  ffi.Pointer<ffi.Char> flutter_kiwi_ffi_analyze_json_batch(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+    int textCount,
+    int topN,
+    int matchOptions,
+  ) {
+    analyzeBatchTopN = topN;
+    analyzeBatchMatchOptions = matchOptions;
+    analyzeBatchTexts = List<String>.generate(
+      textCount,
+      (int index) => texts[index].cast<Utf8>().toDartString(),
+      growable: false,
+    );
+    if (returnNullAnalyzeBatch) {
+      return ffi.nullptr;
+    }
+    return _toCharPointer(analyzeBatchPayload);
+  }
+
+  @override
   int flutter_kiwi_ffi_analyze_token_count(
     ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
     ffi.Pointer<ffi.Char> text,
@@ -106,6 +144,55 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
     analyzeTokenCountMatchOptions = matchOptions;
     outTokenCount.value = analyzeTokenCountValue;
     return analyzeTokenCountStatus;
+  }
+
+  @override
+  int flutter_kiwi_ffi_analyze_token_count_batch(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+    int textCount,
+    int topN,
+    int matchOptions,
+    ffi.Pointer<ffi.Int32> outTokenCounts,
+  ) {
+    analyzeTokenCountBatchTopN = topN;
+    analyzeTokenCountBatchMatchOptions = matchOptions;
+    analyzeTokenCountBatchTexts = List<String>.generate(
+      textCount,
+      (int index) => texts[index].cast<Utf8>().toDartString(),
+      growable: false,
+    );
+    if (analyzeTokenCountBatchStatus != 0) {
+      return analyzeTokenCountBatchStatus;
+    }
+    for (int index = 0; index < textCount; index += 1) {
+      outTokenCounts[index] = index < analyzeTokenCountBatchValues.length
+          ? analyzeTokenCountBatchValues[index]
+          : 0;
+    }
+    return 0;
+  }
+
+  @override
+  int flutter_kiwi_ffi_analyze_token_count_batch_runs(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+    int textCount,
+    int runs,
+    int topN,
+    int matchOptions,
+    ffi.Pointer<ffi.Int64> outTotalTokens,
+  ) {
+    analyzeTokenCountBatchRunsTopN = topN;
+    analyzeTokenCountBatchRunsMatchOptions = matchOptions;
+    analyzeTokenCountBatchRunsRuns = runs;
+    analyzeTokenCountBatchRunsTexts = List<String>.generate(
+      textCount,
+      (int index) => texts[index].cast<Utf8>().toDartString(),
+      growable: false,
+    );
+    outTotalTokens.value = analyzeTokenCountBatchRunsTotalTokens;
+    return analyzeTokenCountBatchRunsStatus;
   }
 
   @override
@@ -282,6 +369,7 @@ class _FakeHttpClientResponse extends Stream<List<int>>
   }
 }
 
+// Minimal sink used to trigger stream-timeout callbacks without side effects.
 class _NoopEventSink<T> implements EventSink<T> {
   @override
   void add(T event) {}
@@ -369,13 +457,21 @@ void main() {
 
   setUp(() {
     fakeBindings = _FakeKiwiNativeBindings();
+    // Route all native calls through the controllable fake bindings.
     debugSetKiwiNativeBindingsFactoryForTest(() => fakeBindings);
   });
 
   tearDown(() async {
+    // Reset test-only overrides so individual tests remain isolated.
     debugSetKiwiNativeBindingsFactoryForTest(null);
     debugSetKiwiNativeArchiveOverridesForTest();
     debugSetKiwiNativeHttpClientFactoryForTest(null);
+    debugSetKiwiNativeLibraryCandidatesProviderForTest(null);
+    debugSetKiwiNativeDefaultAssetModelPathForTest(null);
+    debugSetKiwiNativeAutoAssetModelPathsForTest(null);
+    debugSetKiwiNativeResolveModelPathForTest(null);
+    debugSetKiwiNativeModelPreparationTimeoutForTest(null);
+    debugSetKiwiNativeDynamicLibraryOpenerForTest(null);
     fakeBindings.dispose();
     await _clearAssetHandler();
     await _deleteDirectoryIfExists(
@@ -434,6 +530,23 @@ void main() {
     await expectLater(
       KiwiAnalyzer.create(modelPath: '/tmp/model_path'),
       throwsA(kiwiExceptionMessage('Unknown kiwi native error.')),
+    );
+  });
+
+  test('create throws when resolved model path is empty', () async {
+    debugSetKiwiNativeResolveModelPathForTest(
+      ({String? modelPath, String? assetModelPath}) async => '',
+    );
+
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        isA<KiwiException>().having(
+          (KiwiException error) => error.message,
+          'message',
+          contains('Kiwi model not found.'),
+        ),
+      ),
     );
   });
 
@@ -519,6 +632,58 @@ void main() {
     await analyzer.close();
   });
 
+  test('analyzeBatch forwards arguments and decodes payload', () async {
+    fakeBindings.analyzeBatchPayload =
+        '{"results":[{"candidates":[{"probability":0.5,"tokens":[{"form":"가","tag":"NNG","start":0,"length":1,"wordPosition":0,"sentPosition":0,"score":0.1,"typoCost":0.0}]}]},{"candidates":[]}]}';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    final List<KiwiAnalyzeResult> results = await analyzer.analyzeBatch(
+      <String>['가', '나'],
+      options: const KiwiAnalyzeOptions(
+        topN: 2,
+        matchOptions: KiwiMatchOption.url,
+      ),
+    );
+
+    expect(fakeBindings.analyzeBatchTexts, <String>['가', '나']);
+    expect(fakeBindings.analyzeBatchTopN, 2);
+    expect(fakeBindings.analyzeBatchMatchOptions, KiwiMatchOption.url);
+    expect(results, hasLength(2));
+    expect(results.first.candidates, hasLength(1));
+    expect(results.first.candidates.first.tokens.first.form, '가');
+    expect(results.last.candidates, isEmpty);
+    await analyzer.close();
+  });
+
+  test('analyzeBatch throws on null native payload', () async {
+    fakeBindings.returnNullAnalyzeBatch = true;
+    fakeBindings.lastErrorText = 'analyze-batch failed';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    await expectLater(
+      analyzer.analyzeBatch(<String>['abc']),
+      throwsA(kiwiExceptionMessage('analyze-batch failed')),
+    );
+    await analyzer.close();
+  });
+
+  test('analyzeBatch throws on unexpected payload structure', () async {
+    fakeBindings.analyzeBatchPayload = '{"items":[]}';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    await expectLater(
+      analyzer.analyzeBatch(<String>['abc']),
+      throwsA(kiwiExceptionMessage('Unexpected analyze batch payload.')),
+    );
+    await analyzer.close();
+  });
+
   test(
     'analyzeTokenCount forwards arguments and returns token count',
     () async {
@@ -553,6 +718,94 @@ void main() {
     await expectLater(
       analyzer.analyzeTokenCount('abc'),
       throwsA(kiwiExceptionMessage('analyze-token-count failed')),
+    );
+    await analyzer.close();
+  });
+
+  test(
+    'analyzeTokenCountBatch forwards arguments and returns token counts',
+    () async {
+      fakeBindings.analyzeTokenCountBatchValues = <int>[3, 4, 5];
+      final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+        modelPath: '/tmp/model_path',
+      );
+
+      final List<int> tokenCounts = await analyzer.analyzeTokenCountBatch(
+        <String>['하나', '둘', '셋'],
+        options: const KiwiAnalyzeOptions(
+          topN: 2,
+          matchOptions: KiwiMatchOption.url,
+        ),
+      );
+
+      expect(tokenCounts, <int>[3, 4, 5]);
+      expect(fakeBindings.analyzeTokenCountBatchTexts, <String>[
+        '하나',
+        '둘',
+        '셋',
+      ]);
+      expect(fakeBindings.analyzeTokenCountBatchTopN, 2);
+      expect(
+        fakeBindings.analyzeTokenCountBatchMatchOptions,
+        KiwiMatchOption.url,
+      );
+      await analyzer.close();
+    },
+  );
+
+  test('analyzeTokenCountBatch throws on native error', () async {
+    fakeBindings.analyzeTokenCountBatchStatus = -1;
+    fakeBindings.lastErrorText = 'analyze-token-count-batch failed';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    await expectLater(
+      analyzer.analyzeTokenCountBatch(<String>['abc']),
+      throwsA(kiwiExceptionMessage('analyze-token-count-batch failed')),
+    );
+    await analyzer.close();
+  });
+
+  test(
+    'analyzeTokenCountBatchRepeated forwards arguments and returns total tokens',
+    () async {
+      fakeBindings.analyzeTokenCountBatchRunsTotalTokens = 123;
+      final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+        modelPath: '/tmp/model_path',
+      );
+
+      final int totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
+        <String>['하나', '둘'],
+        runs: 5,
+        options: const KiwiAnalyzeOptions(
+          topN: 2,
+          matchOptions: KiwiMatchOption.url,
+        ),
+      );
+
+      expect(totalTokens, 123);
+      expect(fakeBindings.analyzeTokenCountBatchRunsTexts, <String>['하나', '둘']);
+      expect(fakeBindings.analyzeTokenCountBatchRunsRuns, 5);
+      expect(fakeBindings.analyzeTokenCountBatchRunsTopN, 2);
+      expect(
+        fakeBindings.analyzeTokenCountBatchRunsMatchOptions,
+        KiwiMatchOption.url,
+      );
+      await analyzer.close();
+    },
+  );
+
+  test('analyzeTokenCountBatchRepeated throws on native error', () async {
+    fakeBindings.analyzeTokenCountBatchRunsStatus = -1;
+    fakeBindings.lastErrorText = 'analyze-token-count-batch-runs failed';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    await expectLater(
+      analyzer.analyzeTokenCountBatchRepeated(<String>['abc']),
+      throwsA(kiwiExceptionMessage('analyze-token-count-batch-runs failed')),
     );
     await analyzer.close();
   });
@@ -595,7 +848,31 @@ void main() {
       ),
     );
     await expectLater(
+      analyzer.analyzeBatch(<String>['abc']),
+      throwsA(
+        kiwiExceptionMessage(
+          'KiwiAnalyzer is already closed. Create a new instance.',
+        ),
+      ),
+    );
+    await expectLater(
       analyzer.analyzeTokenCount('abc'),
+      throwsA(
+        kiwiExceptionMessage(
+          'KiwiAnalyzer is already closed. Create a new instance.',
+        ),
+      ),
+    );
+    await expectLater(
+      analyzer.analyzeTokenCountBatch(<String>['abc']),
+      throwsA(
+        kiwiExceptionMessage(
+          'KiwiAnalyzer is already closed. Create a new instance.',
+        ),
+      ),
+    );
+    await expectLater(
+      analyzer.analyzeTokenCountBatchRepeated(<String>['abc']),
       throwsA(
         kiwiExceptionMessage(
           'KiwiAnalyzer is already closed. Create a new instance.',
@@ -656,6 +933,60 @@ void main() {
           contains('Failed to load Kiwi model assets'),
         ),
       ),
+    );
+  });
+
+  test('create uses overridden default asset model path', () async {
+    final Map<String, Uint8List> assets = <String, Uint8List>{
+      for (final String fileName in kiwiModelFileNames)
+        'assets/default/base/$fileName': Uint8List.fromList(<int>[1]),
+    };
+    await _setAssetHandler(assets);
+    debugSetKiwiNativeDefaultAssetModelPathForTest('assets/default/base/');
+
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create();
+
+    expect(fakeBindings.initModelPath, isNotNull);
+    await analyzer.close();
+  });
+
+  test('create normalizes trailing slash in auto asset candidates', () async {
+    final Map<String, Uint8List> assets = <String, Uint8List>{
+      for (final String fileName in kiwiModelFileNames)
+        'assets/auto/base/$fileName': Uint8List.fromList(<int>[1]),
+    };
+    await _setAssetHandler(assets);
+    debugSetKiwiNativeDefaultAssetModelPathForTest('');
+    debugSetKiwiNativeAutoAssetModelPathsForTest(<String>['assets/auto/base/']);
+
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create();
+
+    expect(fakeBindings.initModelPath, isNotNull);
+    await analyzer.close();
+  });
+
+  test(
+    'create throws UnsupportedError when native candidate list is empty',
+    () async {
+      debugSetKiwiNativeBindingsFactoryForTest(null);
+      debugSetKiwiNativeLibraryCandidatesProviderForTest(
+        () => const <String>[],
+      );
+
+      await expectLater(
+        KiwiAnalyzer.create(modelPath: '/tmp/model_path'),
+        throwsA(isA<UnsupportedError>()),
+      );
+    },
+  );
+
+  test('create can execute default native binding construction path', () async {
+    debugSetKiwiNativeBindingsFactoryForTest(null);
+    debugSetKiwiNativeDynamicLibraryOpenerForTest(ffi.DynamicLibrary.process);
+
+    await expectLater(
+      KiwiAnalyzer.create(modelPath: '/tmp/model_path'),
+      throwsA(anything),
     );
   });
 
@@ -908,6 +1239,37 @@ void main() {
             (KiwiException error) => error.message,
             'message',
             contains('Failed to download default model'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'create reports default-model preparation timeout through onTimeout',
+    () async {
+      await _setAssetHandler(<String, Uint8List>{});
+      await _deleteDirectoryIfExists(
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+      );
+      debugSetKiwiNativeModelPreparationTimeoutForTest(
+        const Duration(milliseconds: 1),
+      );
+      debugSetKiwiNativeHttpClientFactoryForTest(
+        () => _FakeHttpClient(
+          onGetUrl: (Uri uri) => Completer<HttpClientResponse>().future,
+        ),
+      );
+      debugSetKiwiNativeArchiveOverridesForTest(
+        archiveUrl: 'http://local.test/model.tgz',
+        archiveSha256: '',
+      );
+
+      await expectLater(
+        KiwiAnalyzer.create(),
+        throwsA(
+          kiwiExceptionMessage(
+            'Timed out while preparing default Kiwi model (3 minutes).',
           ),
         ),
       );

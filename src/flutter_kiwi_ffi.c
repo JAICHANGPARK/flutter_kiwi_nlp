@@ -50,6 +50,9 @@ typedef int (*fn_kiwi_builder_add_word)(kiwi_builder_h, const char*, const char*
 typedef kiwi_h (*fn_kiwi_builder_build)(kiwi_builder_h, kiwi_typo_h, float);
 typedef int (*fn_kiwi_close)(kiwi_h);
 typedef kiwi_res_h (*fn_kiwi_analyze)(kiwi_h, const char*, int, kiwi_analyze_option_t, kiwi_pretokenized_h);
+typedef int (*fn_kiwi_reader_t)(int, char*, void*);
+typedef int (*fn_kiwi_receiver_t)(int, kiwi_res_h, void*);
+typedef int (*fn_kiwi_analyze_m)(kiwi_h, fn_kiwi_reader_t, fn_kiwi_receiver_t, void*, int, kiwi_analyze_option_t);
 typedef int (*fn_kiwi_res_size)(kiwi_res_h);
 typedef float (*fn_kiwi_res_prob)(kiwi_res_h, int);
 typedef int (*fn_kiwi_res_word_num)(kiwi_res_h, int);
@@ -73,6 +76,7 @@ typedef struct {
   fn_kiwi_builder_build kiwi_builder_build;
   fn_kiwi_close kiwi_close;
   fn_kiwi_analyze kiwi_analyze;
+  fn_kiwi_analyze_m kiwi_analyze_m;
   fn_kiwi_res_size kiwi_res_size;
   fn_kiwi_res_prob kiwi_res_prob;
   fn_kiwi_res_word_num kiwi_res_word_num;
@@ -331,6 +335,9 @@ static int load_kiwi_library_once(void) {
     return -1;
   }
 
+  // Optional on legacy distributions.
+  g_kiwi_api.kiwi_analyze_m = (fn_kiwi_analyze_m)kiwi_dlsym(g_kiwi_lib, "kiwi_analyze_m");
+
   g_kiwi_api_loaded = 1;
   return 0;
 }
@@ -430,6 +437,309 @@ FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_close(flutter_kiwi_ffi_handle_t* hand
   return 0;
 }
 
+static kiwi_analyze_option_t build_kiwi_analyze_options(
+    flutter_kiwi_ffi_handle_t* handle,
+    int32_t match_options) {
+  kiwi_analyze_option_t options;
+  options.match_options =
+      match_options == 0 ? handle->default_match_options : match_options;
+  options.blocklist = NULL;
+  options.open_ending = 0;
+  options.allowed_dialects = KIWI_DIALECT_ALL;
+  options.dialect_cost = 3.0f;
+  return options;
+}
+
+static int append_single_result_json(string_builder_t* builder, kiwi_res_h res) {
+  if (!builder || !res) {
+    wrapper_set_error("Invalid analyze result payload.");
+    return -1;
+  }
+
+  int failed = 0;
+  int candidate_count = g_kiwi_api.kiwi_res_size(res);
+  if (candidate_count < 0) {
+    wrapper_set_error_from_kiwi("Invalid Kiwi result set.");
+    return -1;
+  }
+
+  failed |= sb_append(builder, "{\"candidates\":[");
+
+  for (int i = 0; !failed && i < candidate_count; ++i) {
+    if (i > 0) failed |= sb_append(builder, ",");
+    failed |= sb_append_format(
+        builder,
+        "{\"probability\":%.8g,\"tokens\":[",
+        g_kiwi_api.kiwi_res_prob(res, i));
+
+    int token_count = g_kiwi_api.kiwi_res_word_num(res, i);
+    if (token_count < 0) {
+      wrapper_set_error_from_kiwi("Invalid Kiwi token count.");
+      failed = 1;
+      break;
+    }
+
+    for (int j = 0; !failed && j < token_count; ++j) {
+      if (j > 0) failed |= sb_append(builder, ",");
+
+      const char* form = g_kiwi_api.kiwi_res_form(res, i, j);
+      const char* tag = g_kiwi_api.kiwi_res_tag(res, i, j);
+      int start = g_kiwi_api.kiwi_res_position(res, i, j);
+      int length = g_kiwi_api.kiwi_res_length(res, i, j);
+      int word_position = g_kiwi_api.kiwi_res_word_position(res, i, j);
+      int sent_position = g_kiwi_api.kiwi_res_sent_position(res, i, j);
+      float score = g_kiwi_api.kiwi_res_score(res, i, j);
+      float typo_cost = g_kiwi_api.kiwi_res_typo_cost(res, i, j);
+
+      if (start < 0 || length < 0 || word_position < 0 || sent_position < 0) {
+        wrapper_set_error_from_kiwi("Invalid token metadata.");
+        failed = 1;
+        break;
+      }
+
+      failed |= sb_append(builder, "{\"form\":\"");
+      failed |= sb_append_json_escaped(builder, form ? form : "");
+      failed |= sb_append(builder, "\",\"tag\":\"");
+      failed |= sb_append_json_escaped(builder, tag ? tag : "");
+      failed |= sb_append_format(
+          builder,
+          "\",\"start\":%d,\"length\":%d,\"wordPosition\":%d,\"sentPosition\":%d,\"score\":%.8g,\"typoCost\":%.8g}",
+          start,
+          length,
+          word_position,
+          sent_position,
+          score,
+          typo_cost);
+    }
+
+    failed |= sb_append(builder, "]}");
+  }
+
+  failed |= sb_append(builder, "]}");
+  if (failed) {
+    if (!g_last_error[0]) {
+      wrapper_set_error("Failed to build analyze JSON.");
+    }
+    return -1;
+  }
+  return 0;
+}
+
+static void free_string_array(char** values, int32_t count) {
+  if (!values) return;
+  for (int32_t i = 0; i < count; ++i) {
+    free(values[i]);
+  }
+  free(values);
+}
+
+typedef struct {
+  const char* const* texts;
+  int32_t text_count;
+  int64_t token_total;
+  int failed;
+  char error_message[1024];
+} analyze_m_count_context_t;
+
+typedef struct {
+  const char* const* texts;
+  int32_t text_count;
+  char** outputs;
+  int failed;
+  char error_message[1024];
+} analyze_m_json_context_t;
+
+static int analyze_m_count_reader_callback(int index, char* buffer, void* user_data) {
+  analyze_m_count_context_t* context = (analyze_m_count_context_t*)user_data;
+  if (!context || index < 0 || index >= context->text_count) {
+    return 0;
+  }
+  const char* sentence = context->texts[index];
+  if (!sentence) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "texts[%d] must not be null.",
+        index);
+    return 0;
+  }
+  size_t length = strlen(sentence);
+  if (!buffer) {
+    if (length > (size_t)INT32_MAX) {
+      context->failed = 1;
+      snprintf(
+          context->error_message,
+          sizeof(context->error_message),
+          "texts[%d] is too long.",
+          index);
+      return 0;
+    }
+    return (int)length;
+  }
+  if (length > 0) {
+    memcpy(buffer, sentence, length);
+  }
+  return 0;
+}
+
+static int analyze_m_json_reader_callback(int index, char* buffer, void* user_data) {
+  analyze_m_json_context_t* context = (analyze_m_json_context_t*)user_data;
+  if (!context || index < 0 || index >= context->text_count) {
+    return 0;
+  }
+  const char* sentence = context->texts[index];
+  if (!sentence) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "texts[%d] must not be null.",
+        index);
+    return 0;
+  }
+  size_t length = strlen(sentence);
+  if (!buffer) {
+    if (length > (size_t)INT32_MAX) {
+      context->failed = 1;
+      snprintf(
+          context->error_message,
+          sizeof(context->error_message),
+          "texts[%d] is too long.",
+          index);
+      return 0;
+    }
+    return (int)length;
+  }
+  if (length > 0) {
+    memcpy(buffer, sentence, length);
+  }
+  return 0;
+}
+
+static int analyze_m_count_receiver_callback(
+    int index,
+    kiwi_res_h result,
+    void* user_data) {
+  analyze_m_count_context_t* context = (analyze_m_count_context_t*)user_data;
+  if (!context) {
+    if (result) g_kiwi_api.kiwi_res_close(result);
+    return 0;
+  }
+
+  if (index < 0 || index >= context->text_count) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "Receiver index out of range: %d",
+        index);
+  }
+
+  if (!result) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "Receiver result is null at index %d",
+        index);
+    return 0;
+  }
+
+  if (!context->failed) {
+    int token_count = g_kiwi_api.kiwi_res_word_num(result, 0);
+    if (token_count < 0) {
+      int candidate_count = g_kiwi_api.kiwi_res_size(result);
+      if (candidate_count == 0) {
+        token_count = 0;
+      } else {
+        context->failed = 1;
+        snprintf(
+            context->error_message,
+            sizeof(context->error_message),
+            "Invalid token count at index %d",
+            index);
+      }
+    }
+    if (!context->failed) {
+      context->token_total += token_count;
+    }
+  }
+
+  g_kiwi_api.kiwi_res_close(result);
+  return 0;
+}
+
+static int analyze_m_json_receiver_callback(
+    int index,
+    kiwi_res_h result,
+    void* user_data) {
+  analyze_m_json_context_t* context = (analyze_m_json_context_t*)user_data;
+  if (!context) {
+    if (result) g_kiwi_api.kiwi_res_close(result);
+    return 0;
+  }
+
+  if (index < 0 || index >= context->text_count) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "Receiver index out of range: %d",
+        index);
+  }
+
+  if (!result) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "Receiver result is null at index %d",
+        index);
+    return 0;
+  }
+
+  if (!context->failed && context->outputs[index] != NULL) {
+    context->failed = 1;
+    snprintf(
+        context->error_message,
+        sizeof(context->error_message),
+        "Duplicate receiver output at index %d",
+        index);
+  }
+
+  if (!context->failed) {
+    string_builder_t builder;
+    if (sb_init(&builder, 512) != 0) {
+      context->failed = 1;
+      snprintf(
+          context->error_message,
+          sizeof(context->error_message),
+          "Failed to allocate output buffer.");
+    } else if (append_single_result_json(&builder, result) != 0) {
+      context->failed = 1;
+      if (g_last_error[0]) {
+        snprintf(
+            context->error_message,
+            sizeof(context->error_message),
+            "%s",
+            g_last_error);
+      } else {
+        snprintf(
+            context->error_message,
+            sizeof(context->error_message),
+            "Failed to build analyze JSON.");
+      }
+      sb_destroy(&builder);
+    } else {
+      context->outputs[index] = builder.data;
+    }
+  }
+
+  g_kiwi_api.kiwi_res_close(result);
+  return 0;
+}
+
 FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json(
     flutter_kiwi_ffi_handle_t* handle,
     const char* text,
@@ -449,12 +759,8 @@ FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json(
     g_kiwi_api.kiwi_clear_error();
   }
 
-  kiwi_analyze_option_t options;
-  options.match_options = match_options == 0 ? handle->default_match_options : match_options;
-  options.blocklist = NULL;
-  options.open_ending = 0;
-  options.allowed_dialects = KIWI_DIALECT_ALL;
-  options.dialect_cost = 3.0f;
+  kiwi_analyze_option_t options =
+      build_kiwi_analyze_options(handle, match_options);
 
   kiwi_res_h res =
       g_kiwi_api.kiwi_analyze(handle->kiwi, text, top_n > 0 ? top_n : 1, options, NULL);
@@ -470,69 +776,127 @@ FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json(
     return NULL;
   }
 
-  int failed = 0;
-  int candidate_count = g_kiwi_api.kiwi_res_size(res);
-  if (candidate_count < 0) {
-    failed = 1;
-    wrapper_set_error_from_kiwi("Invalid Kiwi result set.");
+  int failed = append_single_result_json(&builder, res) != 0;
+  g_kiwi_api.kiwi_res_close(res);
+  if (failed) {
+    sb_destroy(&builder);
+    return NULL;
   }
 
-  if (!failed) failed |= sb_append(&builder, "{\"candidates\":[");
+  return builder.data;
+}
 
-  for (int i = 0; !failed && i < candidate_count; ++i) {
-    if (i > 0) failed |= sb_append(&builder, ",");
-    failed |= sb_append_format(&builder, "{\"probability\":%.8g,\"tokens\":[", g_kiwi_api.kiwi_res_prob(res, i));
+FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json_batch(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* const* texts,
+    int32_t text_count,
+    int32_t top_n,
+    int32_t match_options) {
+  wrapper_clear_error();
+  if (!handle || !handle->kiwi) {
+    wrapper_set_error("Invalid analyzer handle.");
+    return NULL;
+  }
+  if (!texts) {
+    wrapper_set_error("texts must not be null.");
+    return NULL;
+  }
+  if (text_count < 0) {
+    wrapper_set_error("text_count must be >= 0.");
+    return NULL;
+  }
 
-    int token_count = g_kiwi_api.kiwi_res_word_num(res, i);
-    if (token_count < 0) {
-      failed = 1;
-      wrapper_set_error_from_kiwi("Invalid Kiwi token count.");
-      break;
-    }
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
 
-    for (int j = 0; !failed && j < token_count; ++j) {
-      if (j > 0) failed |= sb_append(&builder, ",");
+  string_builder_t builder;
+  if (sb_init(&builder, 1024) != 0) {
+    wrapper_set_error("Failed to allocate output buffer.");
+    return NULL;
+  }
 
-      const char* form = g_kiwi_api.kiwi_res_form(res, i, j);
-      const char* tag = g_kiwi_api.kiwi_res_tag(res, i, j);
-      int start = g_kiwi_api.kiwi_res_position(res, i, j);
-      int length = g_kiwi_api.kiwi_res_length(res, i, j);
-      int word_position = g_kiwi_api.kiwi_res_word_position(res, i, j);
-      int sent_position = g_kiwi_api.kiwi_res_sent_position(res, i, j);
-      float score = g_kiwi_api.kiwi_res_score(res, i, j);
-      float typo_cost = g_kiwi_api.kiwi_res_typo_cost(res, i, j);
+  int failed = 0;
+  failed |= sb_append(&builder, "{\"results\":[");
 
-      if (start < 0 || length < 0 || word_position < 0 || sent_position < 0) {
+  if (!failed && text_count > 0) {
+    kiwi_analyze_option_t options =
+        build_kiwi_analyze_options(handle, match_options);
+
+    if (g_kiwi_api.kiwi_analyze_m) {
+      char** outputs = (char**)calloc((size_t)text_count, sizeof(char*));
+      if (!outputs) {
         failed = 1;
-        wrapper_set_error_from_kiwi("Invalid token metadata.");
-        break;
+        wrapper_set_error("Failed to allocate batch output buffer.");
+      } else {
+        analyze_m_json_context_t context = {
+            .texts = texts,
+            .text_count = text_count,
+            .outputs = outputs,
+            .failed = 0,
+            .error_message = {0},
+        };
+        int read_count = g_kiwi_api.kiwi_analyze_m(
+            handle->kiwi,
+            analyze_m_json_reader_callback,
+            analyze_m_json_receiver_callback,
+            &context,
+            top_n > 0 ? top_n : 1,
+            options);
+        if (read_count < 0) {
+          failed = 1;
+          wrapper_set_error_from_kiwi("kiwi_analyze_m failed.");
+        } else if (context.failed) {
+          failed = 1;
+          wrapper_set_error(context.error_message);
+        } else if (read_count != text_count) {
+          failed = 1;
+          wrapper_set_error("kiwi_analyze_m read count mismatch.");
+        } else {
+          for (int32_t i = 0; i < text_count; ++i) {
+            if (!outputs[i]) {
+              failed = 1;
+              wrapper_set_error("Batch result payload is incomplete.");
+              break;
+            }
+            if (i > 0) failed |= sb_append(&builder, ",");
+            if (!failed) failed |= sb_append(&builder, outputs[i]);
+          }
+        }
+        free_string_array(outputs, text_count);
       }
-
-      failed |= sb_append(&builder, "{\"form\":\"");
-      failed |= sb_append_json_escaped(&builder, form ? form : "");
-      failed |= sb_append(&builder, "\",\"tag\":\"");
-      failed |= sb_append_json_escaped(&builder, tag ? tag : "");
-      failed |= sb_append_format(
-          &builder,
-          "\",\"start\":%d,\"length\":%d,\"wordPosition\":%d,\"sentPosition\":%d,\"score\":%.8g,\"typoCost\":%.8g}",
-          start,
-          length,
-          word_position,
-          sent_position,
-          score,
-          typo_cost);
+    } else {
+      for (int32_t index = 0; !failed && index < text_count; ++index) {
+        const char* sentence = texts[index];
+        if (!sentence) {
+          failed = 1;
+          wrapper_set_error("texts must not contain null.");
+          break;
+        }
+        kiwi_res_h res = g_kiwi_api.kiwi_analyze(
+            handle->kiwi,
+            sentence,
+            top_n > 0 ? top_n : 1,
+            options,
+            NULL);
+        if (!res) {
+          failed = 1;
+          wrapper_set_error_from_kiwi("Kiwi analyze failed.");
+          break;
+        }
+        if (index > 0) failed |= sb_append(&builder, ",");
+        if (!failed && append_single_result_json(&builder, res) != 0) {
+          failed = 1;
+        }
+        g_kiwi_api.kiwi_res_close(res);
+      }
     }
-
-    failed |= sb_append(&builder, "]}");
   }
 
   if (!failed) failed |= sb_append(&builder, "]}");
-
-  g_kiwi_api.kiwi_res_close(res);
-
   if (failed) {
     if (!g_last_error[0]) {
-      wrapper_set_error("Failed to build analyze JSON.");
+      wrapper_set_error("Failed to build batch analyze JSON.");
     }
     sb_destroy(&builder);
     return NULL;
@@ -541,13 +905,12 @@ FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json(
   return builder.data;
 }
 
-FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count(
+static int32_t analyze_token_count_internal(
     flutter_kiwi_ffi_handle_t* handle,
     const char* text,
     int32_t top_n,
     int32_t match_options,
     int32_t* out_token_count) {
-  wrapper_clear_error();
   if (!handle || !handle->kiwi) {
     wrapper_set_error("Invalid analyzer handle.");
     return -1;
@@ -561,44 +924,243 @@ FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count(
     return -1;
   }
 
-  if (g_kiwi_api.kiwi_clear_error) {
-    g_kiwi_api.kiwi_clear_error();
-  }
-
   kiwi_analyze_option_t options;
-  options.match_options = match_options == 0 ? handle->default_match_options : match_options;
+  options.match_options =
+      match_options == 0 ? handle->default_match_options : match_options;
   options.blocklist = NULL;
   options.open_ending = 0;
   options.allowed_dialects = KIWI_DIALECT_ALL;
   options.dialect_cost = 3.0f;
 
-  kiwi_res_h res =
-      g_kiwi_api.kiwi_analyze(handle->kiwi, text, top_n > 0 ? top_n : 1, options, NULL);
+  kiwi_res_h res = g_kiwi_api.kiwi_analyze(
+      handle->kiwi, text, top_n > 0 ? top_n : 1, options, NULL);
   if (!res) {
     wrapper_set_error_from_kiwi("Kiwi analyze failed.");
     return -1;
   }
 
-  int candidate_count = g_kiwi_api.kiwi_res_size(res);
-  if (candidate_count < 0) {
-    g_kiwi_api.kiwi_res_close(res);
-    wrapper_set_error_from_kiwi("Invalid Kiwi result set.");
-    return -1;
-  }
-  if (candidate_count == 0) {
-    *out_token_count = 0;
-    g_kiwi_api.kiwi_res_close(res);
-    return 0;
-  }
-
   int token_count = g_kiwi_api.kiwi_res_word_num(res, 0);
-  g_kiwi_api.kiwi_res_close(res);
   if (token_count < 0) {
+    int candidate_count = g_kiwi_api.kiwi_res_size(res);
+    g_kiwi_api.kiwi_res_close(res);
+    if (candidate_count == 0) {
+      *out_token_count = 0;
+      return 0;
+    }
     wrapper_set_error_from_kiwi("Invalid Kiwi token count.");
     return -1;
   }
+  g_kiwi_api.kiwi_res_close(res);
 
   *out_token_count = token_count;
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* text,
+    int32_t top_n,
+    int32_t match_options,
+    int32_t* out_token_count) {
+  wrapper_clear_error();
+
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
+
+  return analyze_token_count_internal(
+      handle, text, top_n, match_options, out_token_count);
+}
+
+FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count_batch(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* const* texts,
+    int32_t text_count,
+    int32_t top_n,
+    int32_t match_options,
+    int32_t* out_token_counts) {
+  wrapper_clear_error();
+  if (!texts) {
+    wrapper_set_error("texts must not be null.");
+    return -1;
+  }
+  if (!out_token_counts) {
+    wrapper_set_error("out_token_counts must not be null.");
+    return -1;
+  }
+  if (text_count < 0) {
+    wrapper_set_error("text_count must be >= 0.");
+    return -1;
+  }
+  if (text_count == 0) {
+    return 0;
+  }
+
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
+
+  for (int32_t index = 0; index < text_count; ++index) {
+    const char* sentence = texts[index];
+    if (!sentence) {
+      char message[128];
+      snprintf(message, sizeof(message), "texts[%d] must not be null.", index);
+      wrapper_set_error(message);
+      return -1;
+    }
+    if (analyze_token_count_internal(
+            handle,
+            sentence,
+            top_n,
+            match_options,
+            out_token_counts + index) != 0) {
+      char message[1024];
+      if (g_last_error[0]) {
+        snprintf(
+            message,
+            sizeof(message),
+            "Batch analyze failed at index %d: %s",
+            index,
+            g_last_error);
+      } else {
+        snprintf(
+            message,
+            sizeof(message),
+            "Batch analyze failed at index %d.",
+            index);
+      }
+      wrapper_set_error(message);
+      return -1;
+    }
+  }
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count_batch_runs(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* const* texts,
+    int32_t text_count,
+    int32_t runs,
+    int32_t top_n,
+    int32_t match_options,
+    int64_t* out_total_tokens) {
+  wrapper_clear_error();
+  if (!texts) {
+    wrapper_set_error("texts must not be null.");
+    return -1;
+  }
+  if (!out_total_tokens) {
+    wrapper_set_error("out_total_tokens must not be null.");
+    return -1;
+  }
+  if (text_count < 0) {
+    wrapper_set_error("text_count must be >= 0.");
+    return -1;
+  }
+  if (runs < 0) {
+    wrapper_set_error("runs must be >= 0.");
+    return -1;
+  }
+  if (text_count == 0 || runs == 0) {
+    *out_total_tokens = 0;
+    return 0;
+  }
+
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
+
+  kiwi_analyze_option_t options;
+  options.match_options =
+      match_options == 0 ? handle->default_match_options : match_options;
+  options.blocklist = NULL;
+  options.open_ending = 0;
+  options.allowed_dialects = KIWI_DIALECT_ALL;
+  options.dialect_cost = 3.0f;
+
+  int64_t total_tokens = 0;
+
+  if (g_kiwi_api.kiwi_analyze_m) {
+    for (int32_t run = 0; run < runs; ++run) {
+      analyze_m_count_context_t context = {
+          .texts = texts,
+          .text_count = text_count,
+          .token_total = 0,
+          .failed = 0,
+          .error_message = {0},
+      };
+
+      int read_count = g_kiwi_api.kiwi_analyze_m(
+          handle->kiwi,
+          analyze_m_count_reader_callback,
+          analyze_m_count_receiver_callback,
+          &context,
+          top_n > 0 ? top_n : 1,
+          options);
+      if (read_count < 0) {
+        wrapper_set_error_from_kiwi("kiwi_analyze_m failed.");
+        return -1;
+      }
+      if (context.failed) {
+        wrapper_set_error(context.error_message);
+        return -1;
+      }
+      if (read_count != text_count) {
+        char message[256];
+        snprintf(
+            message,
+            sizeof(message),
+            "kiwi_analyze_m read count mismatch: expected %d, got %d.",
+            text_count,
+            read_count);
+        wrapper_set_error(message);
+        return -1;
+      }
+      total_tokens += context.token_total;
+    }
+  } else {
+    for (int32_t run = 0; run < runs; ++run) {
+      for (int32_t index = 0; index < text_count; ++index) {
+        const char* sentence = texts[index];
+        if (!sentence) {
+          char message[128];
+          snprintf(message, sizeof(message), "texts[%d] must not be null.", index);
+          wrapper_set_error(message);
+          return -1;
+        }
+        int32_t token_count = 0;
+        if (analyze_token_count_internal(
+                handle,
+                sentence,
+                top_n,
+                options.match_options,
+                &token_count) != 0) {
+          char message[1024];
+          if (g_last_error[0]) {
+            snprintf(
+                message,
+                sizeof(message),
+                "Batch repeated analyze failed at run %d index %d: %s",
+                run,
+                index,
+                g_last_error);
+          } else {
+            snprintf(
+                message,
+                sizeof(message),
+                "Batch repeated analyze failed at run %d index %d.",
+                run,
+                index);
+          }
+          wrapper_set_error(message);
+          return -1;
+        }
+        total_tokens += token_count;
+      }
+    }
+  }
+
+  *out_total_tokens = total_tokens;
   return 0;
 }
 

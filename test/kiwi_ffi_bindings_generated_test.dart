@@ -79,6 +79,37 @@ class _BindingStubs {
   );
 
   late final ffi.NativeCallable<
+    ffi.Pointer<ffi.Char> Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+    )
+  >
+  _analyzeBatch = _trackCallable(
+    ffi.NativeCallable<
+      ffi.Pointer<ffi.Char> Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+      int textCount,
+      int topN,
+      int matchOptions,
+    ) {
+      return '{"results":[{"candidates":[]},{"candidates":[]}]}'
+          .toNativeUtf8()
+          .cast<ffi.Char>();
+    }),
+  );
+
+  late final ffi.NativeCallable<
     ffi.Int32 Function(
       ffi.Pointer<flutter_kiwi_ffi_handle_t>,
       ffi.Pointer<ffi.Char>,
@@ -104,6 +135,77 @@ class _BindingStubs {
       ffi.Pointer<ffi.Int32> outTokenCount,
     ) {
       outTokenCount.value = 42;
+      return 0;
+    }, exceptionalReturn: -1),
+  );
+
+  late final ffi.NativeCallable<
+    ffi.Int32 Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Int32>,
+    )
+  >
+  _analyzeTokenCountBatch = _trackCallable(
+    ffi.NativeCallable<
+      ffi.Int32 Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Pointer<ffi.Int32>,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+      int textCount,
+      int topN,
+      int matchOptions,
+      ffi.Pointer<ffi.Int32> outTokenCounts,
+    ) {
+      for (int index = 0; index < textCount; index += 1) {
+        outTokenCounts[index] = 70 + index;
+      }
+      return 0;
+    }, exceptionalReturn: -1),
+  );
+
+  late final ffi.NativeCallable<
+    ffi.Int32 Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Int64>,
+    )
+  >
+  _analyzeTokenCountBatchRuns = _trackCallable(
+    ffi.NativeCallable<
+      ffi.Int32 Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Pointer<ffi.Int64>,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+      int textCount,
+      int runs,
+      int topN,
+      int matchOptions,
+      ffi.Pointer<ffi.Int64> outTotalTokens,
+    ) {
+      outTotalTokens.value = 4321;
       return 0;
     }, exceptionalReturn: -1),
   );
@@ -173,8 +275,14 @@ class _BindingStubs {
       'flutter_kiwi_ffi_init' => _init.nativeFunction.cast(),
       'flutter_kiwi_ffi_close' => _close.nativeFunction.cast(),
       'flutter_kiwi_ffi_analyze_json' => _analyze.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_json_batch' =>
+        _analyzeBatch.nativeFunction.cast(),
       'flutter_kiwi_ffi_analyze_token_count' =>
         _analyzeTokenCount.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_token_count_batch' =>
+        _analyzeTokenCountBatch.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_token_count_batch_runs' =>
+        _analyzeTokenCountBatchRuns.nativeFunction.cast(),
       'flutter_kiwi_ffi_add_user_word' => _addWord.nativeFunction.cast(),
       'flutter_kiwi_ffi_free_string' => _freeString.nativeFunction.cast(),
       'flutter_kiwi_ffi_last_error' => _lastError.nativeFunction.cast(),
@@ -240,12 +348,63 @@ void main() {
       0,
     );
     expect(outTokenCount.value, 42);
+    final ffi.Pointer<ffi.Pointer<ffi.Char>> batchTexts =
+        malloc<ffi.Pointer<ffi.Char>>(2);
+    final ffi.Pointer<ffi.Int32> batchOutTokenCounts = malloc<ffi.Int32>(2);
+    final ffi.Pointer<ffi.Char> batchText0 = 'x'.toNativeUtf8().cast();
+    final ffi.Pointer<ffi.Char> batchText1 = 'y'.toNativeUtf8().cast();
+    batchTexts[0] = batchText0;
+    batchTexts[1] = batchText1;
+    addTearDown(() {
+      malloc.free(batchText0.cast<Utf8>());
+      malloc.free(batchText1.cast<Utf8>());
+      malloc.free(batchTexts);
+      malloc.free(batchOutTokenCounts);
+    });
+    expect(
+      bindings.flutter_kiwi_ffi_analyze_token_count_batch(
+        handle,
+        batchTexts,
+        2,
+        1,
+        0,
+        batchOutTokenCounts,
+      ),
+      0,
+    );
+    expect(batchOutTokenCounts[0], 70);
+    expect(batchOutTokenCounts[1], 71);
+    final ffi.Pointer<ffi.Int64> batchRunsOutTotalTokens = malloc<ffi.Int64>(1);
+    addTearDown(() {
+      malloc.free(batchRunsOutTotalTokens);
+    });
+    expect(
+      bindings.flutter_kiwi_ffi_analyze_token_count_batch_runs(
+        handle,
+        batchTexts,
+        2,
+        3,
+        1,
+        0,
+        batchRunsOutTotalTokens,
+      ),
+      0,
+    );
+    expect(batchRunsOutTotalTokens.value, 4321);
 
     final ffi.Pointer<ffi.Char> jsonPtr = bindings
         .flutter_kiwi_ffi_analyze_json(handle, text, 1, 0);
     expect(jsonPtr.cast<Utf8>().toDartString(), '{"candidates":[]}');
     bindings.flutter_kiwi_ffi_free_string(jsonPtr);
     expect(stubs.freedPointers, contains(jsonPtr.address));
+    final ffi.Pointer<ffi.Char> batchJsonPtr = bindings
+        .flutter_kiwi_ffi_analyze_json_batch(handle, batchTexts, 2, 1, 0);
+    expect(
+      batchJsonPtr.cast<Utf8>().toDartString(),
+      '{"results":[{"candidates":[]},{"candidates":[]}]}',
+    );
+    bindings.flutter_kiwi_ffi_free_string(batchJsonPtr);
+    expect(stubs.freedPointers, contains(batchJsonPtr.address));
 
     expect(
       bindings.flutter_kiwi_ffi_last_error().cast<Utf8>().toDartString(),

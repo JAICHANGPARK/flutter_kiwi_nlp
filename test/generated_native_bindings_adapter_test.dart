@@ -80,6 +80,37 @@ class _AdapterBindingStubs {
   );
 
   late final ffi.NativeCallable<
+    ffi.Pointer<ffi.Char> Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+    )
+  >
+  _analyzeBatch = _track(
+    ffi.NativeCallable<
+      ffi.Pointer<ffi.Char> Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+      int textCount,
+      int topN,
+      int matchOptions,
+    ) {
+      return '{"results":[{"candidates":[]},{"candidates":[]}]}'
+          .toNativeUtf8()
+          .cast<ffi.Char>();
+    }),
+  );
+
+  late final ffi.NativeCallable<
     ffi.Int32 Function(
       ffi.Pointer<flutter_kiwi_ffi_handle_t>,
       ffi.Pointer<ffi.Char>,
@@ -105,6 +136,77 @@ class _AdapterBindingStubs {
       ffi.Pointer<ffi.Int32> outTokenCount,
     ) {
       outTokenCount.value = 24;
+      return 0;
+    }, exceptionalReturn: -1),
+  );
+
+  late final ffi.NativeCallable<
+    ffi.Int32 Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Int32>,
+    )
+  >
+  _analyzeTokenCountBatch = _track(
+    ffi.NativeCallable<
+      ffi.Int32 Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Pointer<ffi.Int32>,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+      int textCount,
+      int topN,
+      int matchOptions,
+      ffi.Pointer<ffi.Int32> outTokenCounts,
+    ) {
+      for (int index = 0; index < textCount; index += 1) {
+        outTokenCounts[index] = 50 + index;
+      }
+      return 0;
+    }, exceptionalReturn: -1),
+  );
+
+  late final ffi.NativeCallable<
+    ffi.Int32 Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Int64>,
+    )
+  >
+  _analyzeTokenCountBatchRuns = _track(
+    ffi.NativeCallable<
+      ffi.Int32 Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Pointer<ffi.Int64>,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+      int textCount,
+      int runs,
+      int topN,
+      int matchOptions,
+      ffi.Pointer<ffi.Int64> outTotalTokens,
+    ) {
+      outTotalTokens.value = 999;
       return 0;
     }, exceptionalReturn: -1),
   );
@@ -172,8 +274,14 @@ class _AdapterBindingStubs {
       'flutter_kiwi_ffi_init' => _init.nativeFunction.cast(),
       'flutter_kiwi_ffi_close' => _close.nativeFunction.cast(),
       'flutter_kiwi_ffi_analyze_json' => _analyze.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_json_batch' =>
+        _analyzeBatch.nativeFunction.cast(),
       'flutter_kiwi_ffi_analyze_token_count' =>
         _analyzeTokenCount.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_token_count_batch' =>
+        _analyzeTokenCountBatch.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_token_count_batch_runs' =>
+        _analyzeTokenCountBatchRuns.nativeFunction.cast(),
       'flutter_kiwi_ffi_add_user_word' => _addWord.nativeFunction.cast(),
       'flutter_kiwi_ffi_free_string' => _freeString.nativeFunction.cast(),
       'flutter_kiwi_ffi_last_error' => _lastError.nativeFunction.cast(),
@@ -235,6 +343,49 @@ void main() {
       0,
     );
     expect(outTokenCount.value, 24);
+    final ffi.Pointer<ffi.Pointer<ffi.Char>> batchTexts =
+        malloc<ffi.Pointer<ffi.Char>>(2);
+    final ffi.Pointer<ffi.Int32> batchOutTokenCounts = malloc<ffi.Int32>(2);
+    final ffi.Pointer<ffi.Char> batchText0 = 'a'.toNativeUtf8().cast();
+    final ffi.Pointer<ffi.Char> batchText1 = 'b'.toNativeUtf8().cast();
+    batchTexts[0] = batchText0;
+    batchTexts[1] = batchText1;
+    addTearDown(() {
+      malloc.free(batchText0.cast<Utf8>());
+      malloc.free(batchText1.cast<Utf8>());
+      malloc.free(batchTexts);
+      malloc.free(batchOutTokenCounts);
+    });
+    expect(
+      adapter.flutter_kiwi_ffi_analyze_token_count_batch(
+        handle,
+        batchTexts,
+        2,
+        1,
+        0,
+        batchOutTokenCounts,
+      ),
+      0,
+    );
+    expect(batchOutTokenCounts[0], 50);
+    expect(batchOutTokenCounts[1], 51);
+    final ffi.Pointer<ffi.Int64> batchRunsOutTotalTokens = malloc<ffi.Int64>(1);
+    addTearDown(() {
+      malloc.free(batchRunsOutTotalTokens);
+    });
+    expect(
+      adapter.flutter_kiwi_ffi_analyze_token_count_batch_runs(
+        handle,
+        batchTexts,
+        2,
+        3,
+        1,
+        0,
+        batchRunsOutTotalTokens,
+      ),
+      0,
+    );
+    expect(batchRunsOutTotalTokens.value, 999);
     final ffi.Pointer<ffi.Char> json = adapter.flutter_kiwi_ffi_analyze_json(
       handle,
       text,
@@ -244,6 +395,14 @@ void main() {
     expect(json.cast<Utf8>().toDartString(), '{"candidates":[]}');
     adapter.flutter_kiwi_ffi_free_string(json);
     expect(stubs.freedPointers, contains(json.address));
+    final ffi.Pointer<ffi.Char> batchJson = adapter
+        .flutter_kiwi_ffi_analyze_json_batch(handle, batchTexts, 2, 1, 0);
+    expect(
+      batchJson.cast<Utf8>().toDartString(),
+      '{"results":[{"candidates":[]},{"candidates":[]}]}',
+    );
+    adapter.flutter_kiwi_ffi_free_string(batchJson);
+    expect(stubs.freedPointers, contains(batchJson.address));
     expect(
       adapter.flutter_kiwi_ffi_last_error().cast<Utf8>().toDartString(),
       'adapter-error',

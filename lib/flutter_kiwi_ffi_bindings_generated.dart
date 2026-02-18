@@ -105,6 +105,49 @@ class FlutterKiwiFfiBindings {
         )
       >();
 
+  /// Runs analysis for multiple sentences and returns a JSON object:
+  /// {"results":[{"candidates":[...]}, ...]}.
+  /// Call flutter_kiwi_ffi_free_string to free the returned value.
+  ffi.Pointer<ffi.Char> flutter_kiwi_ffi_analyze_json_batch(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+    int text_count,
+    int top_n,
+    int match_options,
+  ) {
+    return _flutter_kiwi_ffi_analyze_json_batch(
+      handle,
+      texts,
+      text_count,
+      top_n,
+      match_options,
+    );
+  }
+
+  late final _flutter_kiwi_ffi_analyze_json_batchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(
+            ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Int32,
+          )
+        >
+      >('flutter_kiwi_ffi_analyze_json_batch');
+  late final _flutter_kiwi_ffi_analyze_json_batch =
+      _flutter_kiwi_ffi_analyze_json_batchPtr
+          .asFunction<
+            ffi.Pointer<ffi.Char> Function(
+              ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+              ffi.Pointer<ffi.Pointer<ffi.Char>>,
+              int,
+              int,
+              int,
+            )
+          >();
+
   /// Runs analysis and returns the token count of the first candidate.
   /// Returns 0 on success and writes to out_token_count.
   int flutter_kiwi_ffi_analyze_token_count(
@@ -144,6 +187,104 @@ class FlutterKiwiFfiBindings {
               int,
               int,
               ffi.Pointer<ffi.Int32>,
+            )
+          >();
+
+  /// Runs analysis for multiple sentences and returns first-candidate token
+  /// counts for each sentence in order.
+  /// Returns 0 on success and writes to out_token_counts[text_count].
+  int flutter_kiwi_ffi_analyze_token_count_batch(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+    int text_count,
+    int top_n,
+    int match_options,
+    ffi.Pointer<ffi.Int32> out_token_counts,
+  ) {
+    return _flutter_kiwi_ffi_analyze_token_count_batch(
+      handle,
+      texts,
+      text_count,
+      top_n,
+      match_options,
+      out_token_counts,
+    );
+  }
+
+  late final _flutter_kiwi_ffi_analyze_token_count_batchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(
+            ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Pointer<ffi.Int32>,
+          )
+        >
+      >('flutter_kiwi_ffi_analyze_token_count_batch');
+  late final _flutter_kiwi_ffi_analyze_token_count_batch =
+      _flutter_kiwi_ffi_analyze_token_count_batchPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+              ffi.Pointer<ffi.Pointer<ffi.Char>>,
+              int,
+              int,
+              int,
+              ffi.Pointer<ffi.Int32>,
+            )
+          >();
+
+  /// Runs repeated analysis for the same batch and returns the summed
+  /// first-candidate token counts across all runs.
+  /// Returns 0 on success and writes to out_total_tokens.
+  int flutter_kiwi_ffi_analyze_token_count_batch_runs(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> texts,
+    int text_count,
+    int runs,
+    int top_n,
+    int match_options,
+    ffi.Pointer<ffi.Int64> out_total_tokens,
+  ) {
+    return _flutter_kiwi_ffi_analyze_token_count_batch_runs(
+      handle,
+      texts,
+      text_count,
+      runs,
+      top_n,
+      match_options,
+      out_total_tokens,
+    );
+  }
+
+  late final _flutter_kiwi_ffi_analyze_token_count_batch_runsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(
+            ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('flutter_kiwi_ffi_analyze_token_count_batch_runs');
+  late final _flutter_kiwi_ffi_analyze_token_count_batch_runs =
+      _flutter_kiwi_ffi_analyze_token_count_batch_runsPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+              ffi.Pointer<ffi.Pointer<ffi.Char>>,
+              int,
+              int,
+              int,
+              int,
+              ffi.Pointer<ffi.Int64>,
             )
           >();
 
@@ -216,8 +357,6 @@ class FlutterKiwiFfiBindings {
       .asFunction<ffi.Pointer<ffi.Char> Function()>();
 }
 
-/// Opaque native analyzer handle type used by the Kiwi FFI bridge.
 final class flutter_kiwi_ffi_handle extends ffi.Opaque {}
 
-/// Type alias for [flutter_kiwi_ffi_handle].
 typedef flutter_kiwi_ffi_handle_t = flutter_kiwi_ffi_handle;

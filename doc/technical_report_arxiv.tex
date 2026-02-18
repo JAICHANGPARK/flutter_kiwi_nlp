@@ -9,14 +9,12 @@
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
-\usepackage{tabularx}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{enumitem}
 \usepackage{caption}
 \usepackage{pgfplots}
 \usepackage[section]{placeins}
-\usepackage{algorithm}
 \usepackage{algpseudocode}
 
 \pgfplotsset{compat=1.18}
@@ -30,11 +28,10 @@
   urlcolor=blue,
   citecolor=blue,
   pdftitle={flutter\_kiwi\_nlp: A Native-First Cross-Platform Korean NLP Plugin for Flutter},
-  pdfauthor={Jai-Chang Park (Google Developer Expert, Dart \& Flutter)}
+  pdfauthor={Jai-Chang Park}
 }
 
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 
 \lstdefinestyle{code}{
   basicstyle=\ttfamily\small,
@@ -50,7 +47,7 @@
 \algrenewcommand\algorithmicensure{\textbf{Output:}}
 
 \title{\textbf{flutter\_kiwi\_nlp: A Native-First, Cross-Platform Korean NLP Plugin for Flutter}}
-\author{Jai-Chang Park\\Google Developer Expert (GDE), Dart \& Flutter}
+\author{Jai-Chang Park\thanks{Google Developer Expert (GDE), Dart \& Flutter; GDG (Google Developer Groups) Golang Korea; Flutter Seoul.}}
 \date{February 18, 2026}
 
 \begin{document}
@@ -122,6 +119,14 @@ For native targets, once model artifacts are bundled or cached locally, analysis
 can execute without network connectivity (offline-first inference path). For web
 targets, comparable offline behavior requires deployment-specific caching and
 self-hosting policy because the default bootstrap uses CDN module/WASM URLs.
+
+\subsection{Contribution Type}
+This paper is positioned as a \textbf{systems/resource} contribution rather than
+an algorithmic NLP paper. Its primary value is integration engineering:
+cross-runtime API unification, deterministic fallback policy, reproducible
+benchmark protocol, and deployable build/runtime controls for Flutter
+applications. It does not claim a new morphological decoding algorithm or a new
+Korean language model architecture.
 
 \section{Related Work}
 This revision expands the related-work coverage to include core Transformer
@@ -603,7 +608,7 @@ date, and commit velocity windows for each wrapper repository.
 \small
 \caption{Quantified wrapper maintenance signals (as-of 2026-02-17)}
 \label{tab:kiwi-survey-quant}
-\begin{tabularx}{\linewidth}{@{}L{0.12\linewidth}L{0.20\linewidth}L{0.14\linewidth}L{0.14\linewidth}L{0.08\linewidth}L{0.08\linewidth}L{0.06\linewidth}@{}}
+\begin{tabular}{@{}L{0.12\linewidth}L{0.20\linewidth}L{0.14\linewidth}L{0.14\linewidth}L{0.08\linewidth}L{0.08\linewidth}L{0.06\linewidth}@{}}
 \toprule
 Wrapper & Repo & Latest release & Last commit & 90d commits & 365d commits & Stars \\
 \midrule
@@ -615,7 +620,7 @@ Kiwi WASM binding & \path{bab2min/Kiwi} & 2025-12-15 (64d) & 2026-02-02 (15d) & 
 elbird & \path{mrchypark/elbird} & 2025-12-30 (49d) & 2025-12-30 (49d) & 37 & 44 & 34 \\
 kiwigo & \path{codingpot/kiwigo} & N/A & 2025-10-15 (125d) & 0 & 5 & 30 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 \begin{figure}[htbp]
@@ -709,6 +714,7 @@ included.
 
 \subsection{Explicit Non-Goals}
 \begin{itemize}[leftmargin=1.5em]
+  \item Novel morphological-analysis algorithm or model-training contribution.
   \item Full feature parity with every upstream Kiwi API detail.
   \item Guaranteed throughput parity with Python-native \texttt{kiwipiepy}.
   \item Support for targets not declared in Flutter plugin metadata
@@ -769,7 +775,7 @@ store-delivery APK/IPA install sizes.
 \small
 \caption{Artifact footprint snapshot (workspace measurement, 2026-02-18)}
 \label{tab:artifact-footprint}
-\begin{tabularx}{\linewidth}{@{}L{0.42\linewidth}L{0.17\linewidth}L{0.35\linewidth}@{}}
+\begin{tabular}{@{}L{0.42\linewidth}L{0.17\linewidth}L{0.35\linewidth}@{}}
 \toprule
 Artifact & Size (approx.) & Notes \\
 \midrule
@@ -778,7 +784,7 @@ Same default model compressed as local \texttt{.tgz} archive & 79,494,329 bytes 
 \path{android/src/main/jniLibs/arm64-v8a/libkiwi.so} & 166,229,088 bytes (\(\approx\)158.53MiB) & Current artifact is \texttt{with debug\_info}, \texttt{not stripped}. \\
 \path{android/src/main/jniLibs/x86\_64/libkiwi.so} & 200,071,656 bytes (\(\approx\)190.80MiB) & Current artifact is \texttt{with debug\_info}, \texttt{not stripped}. \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 To avoid ambiguity between source artifacts and packaged binaries,
@@ -790,7 +796,7 @@ both debug and release builds in the same workspace snapshot.
 \small
 \caption{Example Android package footprint (debug vs release, 2026-02-18)}
 \label{tab:artifact-footprint-apk}
-\begin{tabularx}{\linewidth}{@{}L{0.42\linewidth}L{0.17\linewidth}L{0.35\linewidth}@{}}
+\begin{tabular}{@{}L{0.42\linewidth}L{0.17\linewidth}L{0.35\linewidth}@{}}
 \toprule
 Packaged item & Size & Notes \\
 \midrule
@@ -800,7 +806,7 @@ Release APK entry \path{lib/arm64-v8a/libkiwi.so} & 7,613,192 bytes & Stripped n
 Release APK entry \path{lib/x86_64/libkiwi.so} & 11,381,344 bytes & Stripped native library entry inside APK. \\
 Release APK model entries \path{assets/.../kiwi-models/cong/base/*} & 79,574,759 bytes compressed & Same files are 99,308,057 bytes uncompressed. \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 Interpretation notes:
@@ -1030,6 +1036,19 @@ The key design choice is JSON transport for analyze output. This decouples Dart
 from Kiwi internal structs and simplifies ownership management across language
 boundaries.
 
+Initial JSON adoption was also a delivery-speed choice during early plugin
+bring-up. The analyzer output is a nested, variable-length schema
+(results/candidates/tokens), and a JSON boundary allowed stable cross-language
+representation before introducing a custom binary schema/allocator contract.
+In practical terms, the initial trade-off prioritized:
+\begin{itemize}[leftmargin=1.5em]
+  \item schema evolution safety across bridge and Dart model changes,
+  \item lower early risk for pointer-ownership bugs in nested payload paths,
+  \item straightforward debugging with human-readable payloads.
+\end{itemize}
+The benchmark sections show the cost of that choice explicitly: measurable
+serialization overhead on hot paths, motivating binary/typed bridge evolution.
+
 \subsection{Dart FFI Binding Layer}
 The native path uses Dart's \texttt{dart:ffi} for symbol binding and
 \texttt{package:ffi/ffi.dart} for UTF-8/pointer utilities. At runtime:
@@ -1080,10 +1099,9 @@ Why this paper uses \texttt{ffigen} instead of handwritten bindings:
   reviewability and incident forensics.
   \item Lower human error risk in repetitive signature plumbing
   (\texttt{NativeFunction}, \texttt{asFunction()}, pointer type mapping).
-  \item Consistent symbol surface between C exports and Dart binding class
-  (\texttt{FlutterKiwiFfiBindings}).
-  \item Better maintenance cost profile for long-lived plugin evolution across
-  Android/iOS/desktop targets.
+  \item Consistent symbol surface between C exports and Dart binding class.
+  \item \texttt{FlutterKiwiFfiBindings} keeps explicit bridge/API mapping and
+  lowers long-term maintenance risk across Android/iOS/desktop targets.
 \end{itemize}
 
 \subsubsection{Code-Generation Pipeline Diagram}
@@ -1237,6 +1255,23 @@ The browser execution path is a staged pipeline:
 Important constraint: this plugin does not assume a browser-available native ABI
 or direct file-system model layout. All web model handling is network and
 in-memory oriented by design.
+
+\subsection{Web Bootstrap Latency and TTI Considerations}
+Web UX is affected not only by steady-state throughput but also by initial
+bootstrap latency. In this plugin, a first-use web interaction latency can be
+conceptually decomposed as:
+\[
+T_{\mathrm{TTI}} \approx
+T_{\mathrm{module\ fetch}} +
+T_{\mathrm{wasm\ fetch}} +
+T_{\mathrm{model\ fetch}} +
+T_{\mathrm{instantiate}} +
+T_{\mathrm{first\ analyze}}.
+\]
+Current report scope focuses on native/mobile throughput and correctness; it
+does not yet include sustained web TTI measurements under controlled cache and
+network conditions. This is treated as explicit future work in
+Section~\ref{sec:future-work}.
 
 \subsection{Web Build Modes}
 The web implementation supports two construction modes:
@@ -1471,9 +1506,9 @@ From the benchmark trial sets included in this report (February 18, 2026):
   iOS measurements were collected in \texttt{debug} mode.
   \item For mobile runs, \texttt{kiwipiepy} comparison values were collected on
   the host macOS runtime using the same corpus and benchmark loop settings.
-  \item This revision introduces explicit layered timing decomposition
-  (\texttt{pure\_elapsed\_ms}, \texttt{full\_elapsed\_ms},
-  \texttt{json\_overhead\_ms}) in addition to warm/cold summaries.
+  \item This revision introduces layered timing decomposition fields:
+  \path{pure_elapsed_ms}, \path{full_elapsed_ms}, and
+  \path{json_overhead_ms}, in addition to warm/cold summaries.
 \end{itemize}
 
 \subsection{Mobile Test Environment Details}
@@ -1518,7 +1553,9 @@ end-to-end impact for finite request counts.
   \item warm metrics use only measured loop time (\texttt{elapsed\_ms}) after
   warmup; cold init is excluded from throughput/latency rows.
   \item init (ms) = elapsed wall time around analyzer creation call
-  (\texttt{KiwiAnalyzer.create(...)}).
+  (\texttt{KiwiAnalyzer.create(...)}), including model-path resolution,
+  potential asset extraction/copy from Flutter bundle to local temp path, and
+  native bridge/Kiwi initialization.
   \item analyses/sec = \texttt{total\_analyses / elapsed\_seconds}
   \item chars/sec = \texttt{total\_chars / elapsed\_seconds}
   \item tokens/sec = \texttt{total\_tokens / elapsed\_seconds}
@@ -1574,14 +1611,15 @@ pure/full paths on the same trial workload. Then:
 
 \begingroup
 \footnotesize
-\begin{longtable}{@{}L{0.27\linewidth}L{0.17\linewidth}L{0.17\linewidth}L{0.11\linewidth}L{0.16\linewidth}L{0.10\linewidth}@{}}
+\setlength{\tabcolsep}{2pt}
+\begin{longtable}{@{}L{0.25\linewidth}L{0.15\linewidth}L{0.15\linewidth}L{0.09\linewidth}L{0.18\linewidth}L{0.12\linewidth}@{}}
 \caption{Layered boundary decomposition summary (mean ± stddev)}\label{tab:benchmark-boundary}\\
 \toprule
-Environment & Pure aps & Full aps & Loss & Overhead/analysis (ms) & Overhead ratio \\
+Env. & Pure APS & Full APS & Loss & \shortstack[l]{Ovh./analysis\\(ms)} & Ovh. ratio \\
 \midrule
 \endfirsthead
 \toprule
-Environment & Pure aps & Full aps & Loss & Overhead/analysis (ms) & Overhead ratio \\
+Env. & Pure APS & Full APS & Loss & \shortstack[l]{Ovh./analysis\\(ms)} & Ovh. ratio \\
 \midrule
 \endhead
 macOS desktop baseline & 2546.24 ± 179.08 & 2260.25 ± 193.49 & 11.23\% & 0.0509 ± 0.0130 & 11.31 ± 1.69\% \\
@@ -1656,6 +1694,12 @@ iOS simulator (debug) & median 1358.27, p95 1496.69 & median 677.10, p95 711.15 
 Android emulator (release) & median 3268.46, p95 4028.02 & median 847.02, p95 1053.33 & 3.86x slower \\
 \bottomrule
 \end{longtable}
+
+Interpretation note: this cold-start metric is intentionally end-to-end and not
+micro-phased. On the Flutter path, it may include asset-model extraction/copy
+work on cache-miss paths in addition to native library/bridge initialization.
+Therefore, the Android 3.86x median gap should be read as combined startup
+cost, not as a JNI/FFI-only penalty estimate.
 
 \subsection{Additional Mobile Runtime Measurements (iOS n=5, Android n=5)}
 \subsubsection{iOS Simulator (debug)}
@@ -1910,6 +1954,9 @@ adds direct evidence for where overhead accumulates. Flutter boundary loss
 (full JSON path vs pure processing path) is 11.23\% on desktop, 13.07\% on iOS
 simulator, and 15.22\% on Android emulator, with per-analysis overhead of
 roughly 0.05--0.10 ms.
+This also bounds expected gains from JSON-path removal alone: eliminating
+serialization would likely recover a meaningful fraction of warm-path overhead,
+but not necessarily close the entire cross-runtime gap by itself.
 
 Based on code inspection and payload values, the most likely contributors are:
 \begin{enumerate}[leftmargin=1.5em]
@@ -1934,9 +1981,9 @@ Based on code inspection and payload values, the most likely contributors are:
   differences even under aligned knobs.
 
   \item \textbf{Worker/thread auto mode mismatch (evidence-based):}
-  \texttt{numThreads = -1} and \texttt{num\_workers = -1} are both auto modes,
-  but they are not guaranteed to map to equivalent parallel execution strategy.
-
+  both runtimes use auto settings (\texttt{-1}) for thread/worker counts, but
+  auto-mode policies are not guaranteed to map to equivalent parallel execution
+  strategy.
   \item \textbf{Model loading path variability (inference):}
   unless \texttt{--model-path} is forced, each runtime may initialize using
   different default lookup paths/caches, potentially affecting cold-start cost.
@@ -2242,7 +2289,7 @@ These hooks allow deterministic tests for initialization and fallback branches.
 \subsection{Test Suite Scope}
 As of February 18, 2026, the test suite is organized in layered form:
 \begin{itemize}[leftmargin=1.5em]
-  \item Core package layer (\path{test/}): 51 unit tests in 14 groups across
+  \item Core package layer (\path{test/}): 63 unit tests in 14 groups across
   9 files.
   \item Example widget/golden layer (\path{example/test/}): 5 tests, including
   3 screenshot(golden) assertions.
@@ -2250,7 +2297,7 @@ As of February 18, 2026, the test suite is organized in layered form:
   (\path{example/integration\_test/}): 3 end-to-end tests.
 \end{itemize}
 
-This yields 59 test declarations across repository test directories. Coverage
+This yields 71 test declarations across repository test directories. Coverage
 focus in the core package layer remains strongest on API contract behavior,
 typed model parsing, option flags, error semantics, and native fallback logic.
 For macOS desktop execution, the three integration tests pass under serial
@@ -2278,9 +2325,12 @@ Key tested areas include:
 Using \texttt{flutter test --coverage test} on February 18, 2026
 (core package layer only):
 \begin{itemize}[leftmargin=1.5em]
-  \item Raw line coverage: 350/374 = 93.58\%.
+  \item Raw line coverage: 384/384 = 100.00\%.
   \item Filtered line coverage: 81/81 = 100.00\%.
 \end{itemize}
+
+Compared with the previous paper snapshot (raw 93.58\%), raw line coverage
+improves by +6.42 percentage points in this revision.
 
 \begin{figure}[htbp]
 \centering
@@ -2300,7 +2350,7 @@ Using \texttt{flutter test --coverage test} on February 18, 2026
   nodes near coords align={vertical}
 ]
 \addplot+[fill=teal!60, draw=teal!80!black] coordinates {
-  (Raw,93.58)
+  (Raw,100.00)
   (Filtered,100.00)
 };
 \end{axis}
@@ -2311,7 +2361,7 @@ Using \texttt{flutter test --coverage test} on February 18, 2026
 
 \FloatBarrier
 
-\subsection{Why Raw and Filtered Coverage Differ}
+\subsection{Why Raw and Filtered Coverage Can Differ}
 The project includes a filtered coverage gate
 (\texttt{tool/check\_coverage.sh}) that excludes:
 \begin{itemize}[leftmargin=1.5em]
@@ -2326,11 +2376,13 @@ The project includes a filtered coverage gate
 The rationale is that parts of these files require runtime/platform integration
 contexts that are harder to exercise in hermetic unit tests. This makes
 filtered coverage useful as a strict gate for stable pure-Dart layers, but it
-must not be interpreted as full end-to-end runtime coverage.
+must not be interpreted as full end-to-end runtime coverage. In the current
+snapshot, raw and filtered values are equal (both 100.00\%), but the filtered
+gate remains relevant as a policy mechanism for future regressions.
 
 \subsection{Honest Quality Assessment}
 The present quality state is strong for deterministic unit-level contract tests
-and now includes initial acceptance/golden coverage in the example app.
+and includes expanded acceptance/golden coverage in the example app.
 Remaining risk still concentrates in integration boundaries:
 \begin{itemize}[leftmargin=1.5em]
   \item native dynamic loading and ABI interaction across target platforms,
@@ -2348,9 +2400,11 @@ next quality multiplier for this plugin class.
 \subsection{Current Limitations}
 \begin{itemize}[leftmargin=1.5em]
   \item Web runtime depends on module/WASM artifact availability unless
-  self-hosted under application-controlled origins.
-  \item Web deployments must satisfy CSP rules for module/WASM fetch origins;
-  default CDN bootstrap therefore introduces an explicit supply-chain boundary.
+  module, WASM, and model assets are self-hosted under
+  application-controlled origins.
+  \item Web deployments must satisfy CSP rules for module/WASM fetch origins.
+  Because the default bootstrap uses CDN URLs, this creates an explicit
+  supply-chain boundary unless deployments self-host artifacts.
   \item Native archive fallback requires network access and writable cache
   location when model assets are not bundled locally.
   \item Throughput can trail Python-native execution in current measurements;
@@ -2364,14 +2418,34 @@ next quality multiplier for this plugin class.
   \item Web throughput benchmark rows are not yet included in this report.
 \end{itemize}
 
-\subsection{Recommended Future Work}
+\subsection{Clarifications on Common Reviewer Questions}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Could zero-copy or binary bridge close the 0.72x gap?}
+  It is a promising direction and is explicitly planned. Current boundary
+  measurements indicate JSON-path overhead around 11--15\% on warm paths; this
+  suggests meaningful gains, but also implies that non-JSON residual costs may
+  still remain after migration.
+  \item \textbf{Does Android init include asset extraction from APK?}
+  Yes, the reported init metric wraps \texttt{KiwiAnalyzer.create(...)} and can
+  include model-path resolution and asset-copy work on cache-miss paths, in
+  addition to native bridge/Kiwi initialization.
+  \item \textbf{How is Web TTI impacted by WASM/model download size?}
+  First-use web latency is affected by module/WASM/model fetch and runtime
+  instantiation; this report currently does not provide controlled TTI numbers,
+  and therefore treats them as explicit future benchmarking scope.
+\end{itemize}
+
+\subsection{Recommended Future Work}\label{sec:future-work}
 \begin{enumerate}[leftmargin=1.5em]
-  \item \textbf{Bridge performance redesign:} replace or complement JSON bridge
-  payloads with typed/native memory transfer to reduce serialization overhead
-  and improve warm-path latency/throughput.
+  \item \textbf{Bridge performance redesign:} prototype and A/B evaluate binary
+  payload designs (for example FlatBuffers/Protobuf-style schemas) and typed
+  native transfer paths against current JSON baseline. Report per-phase gains
+  (serialize/parse/call boundary) and safety complexity (ownership/lifetime).
   \item \textbf{Benchmark external validity:} add release/profile measurements
-  on physical iOS and Android devices and include sustained Web throughput rows
-  under explicit network/cache conditions.
+  on physical iOS and Android devices, with repeated runs under thermal-state
+  controls and explicit startup-path annotations (asset-cache hit/miss). Include
+  sustained Web throughput plus first-use TTI rows under controlled
+  network/cache conditions.
   \item \textbf{Operational hardening:} provide first-class self-hosting
   recipes for web module/WASM/model assets, with CSP and integrity examples.
   \item \textbf{Reliability engineering:} evaluate optional crash-containment
@@ -2414,6 +2488,7 @@ must ship across platforms while preserving deterministic Korean NLP behavior.
 For researchers and reviewers, the value is a reproducible, implementation-level
 specification that surfaces both strengths and unresolved constraints.
 
+\sloppy
 \begin{thebibliography}{99}
 \bibitem{ref_bert}
 J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, ``BERT: Pre-training of Deep
@@ -2590,12 +2665,9 @@ preprint arXiv:2403.19076, 2024. [Online]. Available:
 \url{https://arxiv.org/abs/2403.19076}. [Accessed: 2026-02-17].
 
 \bibitem{ref_fedavg}
-H. B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y Arcas,
-``Communication-Efficient Learning of Deep Networks from Decentralized Data,''
-arXiv preprint arXiv:1602.05629, 2016. [Online]. Available:
+H. B. McMahan et al., ``Communication-Efficient Learning of Deep Networks from
+Decentralized Data,'' arXiv preprint arXiv:1602.05629, 2016. [Online]. Available:
 \url{https://arxiv.org/abs/1602.05629}. [Accessed: 2026-02-17].
-
-
 \bibitem{ref_kiwi_paper}
 E. Park and S. Park, ``Kiwi: A Study on Developing a Korean Morphological
 Analyzer,'' \textit{Korean Journal
@@ -2756,7 +2828,7 @@ Primary generated artifacts:
 \end{itemize}
 
 \section{Appendix D: Benchmark and Test Execution Pseudocode}
-\begin{algorithm}[t]
+\begin{figure}[t]
 \caption{Cross-runtime benchmark orchestration
 (\texttt{tool/benchmark/run\_compare.py})}
 \label{alg:benchmark-orchestration}
@@ -2780,9 +2852,9 @@ Primary generated artifacts:
 \State Generate \path{comparison.md} via
 \path{tool/benchmark/compare_results.py}.
 \end{algorithmic}
-\end{algorithm}
+\end{figure}
 
-\begin{algorithm}[t]
+\begin{figure}[t]
 \caption{Gold-corpus agreement evaluation
 (\texttt{tool/benchmark/gold\_corpus\_compare.py})}
 \label{alg:gold-corpus-eval}
@@ -2803,9 +2875,9 @@ Primary generated artifacts:
 \path{benchmark/results/gold_eval/comparison.md},
 \path{flutter_overall.json}, and \path{kiwipiepy_overall.json}.
 \end{algorithmic}
-\end{algorithm}
+\end{figure}
 
-\begin{algorithm}[t]
+\begin{figure}[t]
 \caption{Unit-test and coverage gate pipeline
 (\texttt{tool/check\_coverage.sh})}
 \label{alg:test-coverage-gate}
@@ -2826,6 +2898,6 @@ $\texttt{coverage} = 100 \times \texttt{LH}/\texttt{LF}$.
   \State \textbf{pass} and report filtered percentage.
 \EndIf
 \end{algorithmic}
-\end{algorithm}
+\end{figure}
 
 \end{document}

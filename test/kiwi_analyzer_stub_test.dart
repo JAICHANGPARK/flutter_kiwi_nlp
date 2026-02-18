@@ -38,7 +38,19 @@ void main() {
       throwsA(hasUnsupportedMessage()),
     );
     await expectLater(
+      analyzer.analyzeBatch(<String>['테스트']),
+      throwsA(hasUnsupportedMessage()),
+    );
+    await expectLater(
       analyzer.analyzeTokenCount('테스트'),
+      throwsA(hasUnsupportedMessage()),
+    );
+    await expectLater(
+      analyzer.analyzeTokenCountBatch(<String>['테스트']),
+      throwsA(hasUnsupportedMessage()),
+    );
+    await expectLater(
+      analyzer.analyzeTokenCountBatchRepeated(<String>['테스트']),
       throwsA(hasUnsupportedMessage()),
     );
     await expectLater(

@@ -483,19 +483,42 @@ Future<_RunStats> _executeRuns({
   int totalChars = 0;
   int totalTokens = 0;
   final bool useTokenCount = analyzeImpl == _analyzeImplTokenCount;
+  final int sentenceCount = sentences.length;
+  final int charsPerRun = sentences.fold<int>(
+    0,
+    (int sum, _BenchmarkSentence sentence) => sum + sentence.runeLength,
+  );
+  final List<String> sentenceTexts = sentences
+      .map((final _BenchmarkSentence sentence) => sentence.text)
+      .toList(growable: false);
 
   final Stopwatch stopwatch = Stopwatch()..start();
 
-  for (int runIndex = 0; runIndex < runs; runIndex += 1) {
-    for (final _BenchmarkSentence sentence in sentences) {
-      final int tokenCount = useTokenCount
-          ? await analyzer.analyzeTokenCount(sentence.text, options: options)
-          : _tokenCountOfBestCandidate(
-              await analyzer.analyze(sentence.text, options: options),
-            );
-      totalAnalyses += 1;
-      totalChars += sentence.runeLength;
-      totalTokens += tokenCount;
+  if (useTokenCount) {
+    totalAnalyses = sentenceCount * runs;
+    totalChars = charsPerRun * runs;
+    totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
+      sentenceTexts,
+      runs: runs,
+      options: options,
+    );
+  } else {
+    for (int runIndex = 0; runIndex < runs; runIndex += 1) {
+      final List<KiwiAnalyzeResult> results = await analyzer.analyzeBatch(
+        sentenceTexts,
+        options: options,
+      );
+      if (results.length != sentenceCount) {
+        throw StateError(
+          'Unexpected analyze batch size: '
+          'expected $sentenceCount, got ${results.length}.',
+        );
+      }
+      totalAnalyses += sentenceCount;
+      totalChars += charsPerRun;
+      for (final KiwiAnalyzeResult result in results) {
+        totalTokens += _tokenCountOfBestCandidate(result);
+      }
     }
   }
 

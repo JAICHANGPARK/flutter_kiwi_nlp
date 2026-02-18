@@ -319,6 +319,26 @@ class KiwiAnalyzer {
     return KiwiAnalyzeResult(candidates: candidates);
   }
 
+  /// Analyzes [texts] and returns results in input order.
+  ///
+  /// This keeps API parity with native backends. On web, it delegates to
+  /// [analyze] sequentially.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<List<KiwiAnalyzeResult>> analyzeBatch(
+    List<String> texts, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    if (texts.isEmpty) {
+      return const <KiwiAnalyzeResult>[];
+    }
+    final List<KiwiAnalyzeResult> results = <KiwiAnalyzeResult>[];
+    for (final String text in texts) {
+      results.add(await analyze(text, options: options));
+    }
+    return results;
+  }
+
   /// Analyzes [text] and returns the first-candidate token count.
   ///
   /// This keeps API parity with native backends. On web, it delegates to
@@ -334,6 +354,53 @@ class KiwiAnalyzer {
       return 0;
     }
     return result.candidates.first.tokens.length;
+  }
+
+  /// Analyzes [texts] and returns first-candidate token counts in order.
+  ///
+  /// This keeps API parity with native backends. On web, it delegates to
+  /// [analyzeTokenCount] sequentially.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<List<int>> analyzeTokenCountBatch(
+    List<String> texts, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    if (texts.isEmpty) {
+      return const <int>[];
+    }
+    final List<int> counts = <int>[];
+    for (final String text in texts) {
+      counts.add(await analyzeTokenCount(text, options: options));
+    }
+    return counts;
+  }
+
+  /// Repeats batch analysis [runs] times and returns summed token counts.
+  ///
+  /// This keeps API parity with native backends.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<int> analyzeTokenCountBatchRepeated(
+    List<String> texts, {
+    int runs = 1,
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    if (runs < 0) {
+      throw const KiwiException('runs must be >= 0.');
+    }
+    if (texts.isEmpty || runs == 0) {
+      return 0;
+    }
+    int totalTokens = 0;
+    for (int run = 0; run < runs; run += 1) {
+      final List<int> counts = await analyzeTokenCountBatch(
+        texts,
+        options: options,
+      );
+      totalTokens += counts.fold<int>(0, (int sum, int count) => sum + count);
+    }
+    return totalTokens;
   }
 
   /// Adds a user dictionary entry to this analyzer instance.

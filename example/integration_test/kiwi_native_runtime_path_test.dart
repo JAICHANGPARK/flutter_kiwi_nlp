@@ -1,3 +1,4 @@
+// Verifies native-runtime library candidate resolution on macOS integration runs.
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
