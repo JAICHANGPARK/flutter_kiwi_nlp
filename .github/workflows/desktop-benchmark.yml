@@ -71,6 +71,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Enable desktop target
         shell: bash
         run: flutter config --enable-${{ matrix.target }}-desktop
@@ -89,17 +92,11 @@ jobs:
             liblzma-dev \
             xvfb
 
-      - name: Install Python dependencies
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install kiwipiepy
-
       - name: Run benchmark (Linux)
         if: matrix.target == 'linux'
         shell: bash
         run: |
-          xvfb-run -a python tool/benchmark/run_compare.py \
+          xvfb-run -a uv run --with kiwipiepy python tool/benchmark/run_compare.py \
             --device "${{ matrix.target }}" \
             --mode "${{ inputs.flutter_mode }}" \
             --trials "${{ inputs.trials }}" \
@@ -116,7 +113,7 @@ jobs:
         if: matrix.target == 'windows'
         shell: pwsh
         run: |
-          python tool/benchmark/run_compare.py `
+          uv run --with kiwipiepy python tool/benchmark/run_compare.py `
             --device "${{ matrix.target }}" `
             --mode "${{ inputs.flutter_mode }}" `
             --trials "${{ inputs.trials }}" `
