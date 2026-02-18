@@ -168,19 +168,33 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
   }
 
   Future<void> _runBenchmarkFromAppBar() async {
+    final _BenchmarkRunOptions? options = await _showBenchmarkOptionsDialog();
+    if (!mounted || options == null) {
+      return;
+    }
+
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('벤치마크 실행 중입니다. 잠시만 기다려 주세요.'),
+      SnackBar(
+        content: Text(
+          '벤치마크 실행 중입니다. '
+          '(모드 ${options.executionModes.length}개)',
+        ),
         duration: Duration(minutes: 10),
       ),
     );
 
     try {
-      final KiwiBenchmarkResult result = await _viewModel.runBenchmark();
+      final List<KiwiBenchmarkResult> results = <KiwiBenchmarkResult>[];
+      for (final KiwiBenchmarkExecutionMode mode in options.executionModes) {
+        final KiwiBenchmarkResult result = await _viewModel.runBenchmark(
+          executionMode: mode,
+        );
+        results.add(result);
+      }
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
-      await _showBenchmarkResultDialog(result);
+      await _showBenchmarkResultDialog(results);
     } catch (error) {
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
@@ -188,9 +202,90 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
     }
   }
 
-  Future<void> _showBenchmarkResultDialog(KiwiBenchmarkResult result) async {
-    final String summary = _formatBenchmarkResult(result);
-    final String jsonPayload = _formatBenchmarkResultAsJson(result);
+  Future<_BenchmarkRunOptions?> _showBenchmarkOptionsDialog() async {
+    return showDialog<_BenchmarkRunOptions>(
+      context: context,
+      builder: (BuildContext context) {
+        Set<KiwiBenchmarkExecutionMode> selectedModes =
+            <KiwiBenchmarkExecutionMode>{
+              KiwiBenchmarkExecutionMode.single,
+              KiwiBenchmarkExecutionMode.batch,
+            };
+        return StatefulBuilder(
+          builder:
+              (BuildContext context, void Function(VoidCallback) setState) {
+                return AlertDialog(
+                  title: const Text('벤치마크 옵션'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '실행 모드',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<KiwiBenchmarkExecutionMode>(
+                        multiSelectionEnabled: true,
+                        segments:
+                            const <ButtonSegment<KiwiBenchmarkExecutionMode>>[
+                              ButtonSegment<KiwiBenchmarkExecutionMode>(
+                                value: KiwiBenchmarkExecutionMode.single,
+                                label: Text('single'),
+                              ),
+                              ButtonSegment<KiwiBenchmarkExecutionMode>(
+                                value: KiwiBenchmarkExecutionMode.batch,
+                                label: Text('batch'),
+                              ),
+                            ],
+                        selected: selectedModes,
+                        onSelectionChanged:
+                            (Set<KiwiBenchmarkExecutionMode> next) {
+                              if (next.isEmpty) {
+                                return;
+                              }
+                              setState(() => selectedModes = next);
+                            },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '두 모드를 모두 선택하면 single/batch 비교표를 '
+                        '한 번에 보여줍니다.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('취소'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        final List<KiwiBenchmarkExecutionMode> orderedModes =
+                            _sortExecutionModes(selectedModes);
+                        Navigator.of(context).pop(
+                          _BenchmarkRunOptions(executionModes: orderedModes),
+                        );
+                      },
+                      child: const Text('실행'),
+                    ),
+                  ],
+                );
+              },
+        );
+      },
+    );
+  }
+
+  Future<void> _showBenchmarkResultDialog(
+    List<KiwiBenchmarkResult> results,
+  ) async {
+    final List<KiwiBenchmarkResult> orderedResults = _sortBenchmarkResults(
+      results,
+    );
+    final String summary = _formatBenchmarkResultSet(orderedResults);
+    final String jsonPayload = _formatBenchmarkResultsAsJson(orderedResults);
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -240,6 +335,101 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
     );
   }
 
+  List<KiwiBenchmarkExecutionMode> _sortExecutionModes(
+    Iterable<KiwiBenchmarkExecutionMode> modes,
+  ) {
+    final List<KiwiBenchmarkExecutionMode> sorted = modes.toList(
+      growable: false,
+    );
+    sorted.sort((a, b) => a.index.compareTo(b.index));
+    return sorted;
+  }
+
+  List<KiwiBenchmarkResult> _sortBenchmarkResults(
+    List<KiwiBenchmarkResult> results,
+  ) {
+    final List<KiwiBenchmarkResult> sorted = results.toList(growable: false);
+    sorted.sort(
+      (KiwiBenchmarkResult a, KiwiBenchmarkResult b) =>
+          a.executionMode.index.compareTo(b.executionMode.index),
+    );
+    return sorted;
+  }
+
+  String _formatBenchmarkResultSet(List<KiwiBenchmarkResult> results) {
+    final StringBuffer buffer = StringBuffer();
+    if (results.length > 1) {
+      buffer
+        ..writeln('single|batch 비교표')
+        ..writeln()
+        ..writeln(_formatBenchmarkComparisonTable(results))
+        ..writeln();
+    }
+    for (int index = 0; index < results.length; index += 1) {
+      if (index > 0) {
+        buffer
+          ..writeln()
+          ..writeln('----------------------------------------')
+          ..writeln();
+      }
+      final KiwiBenchmarkResult result = results[index];
+      if (results.length > 1) {
+        buffer.writeln('[${result.executionMode.label}]');
+      }
+      buffer.writeln(_formatBenchmarkResult(result));
+    }
+    return buffer.toString().trimRight();
+  }
+
+  String _formatBenchmarkComparisonTable(List<KiwiBenchmarkResult> results) {
+    final StringBuffer buffer = StringBuffer()
+      ..writeln('| 모드 | 총 시간(ms) | 처리량(analyses/s) | 평균 지연(ms) |')
+      ..writeln('| --- | ---: | ---: | ---: |');
+    for (final KiwiBenchmarkResult result in results) {
+      buffer.writeln(
+        '| ${result.executionMode.label} | '
+        '${result.elapsedMs.toStringAsFixed(2)} | '
+        '${result.analysesPerSec.toStringAsFixed(2)} | '
+        '${result.avgLatencyMs.toStringAsFixed(4)} |',
+      );
+    }
+
+    KiwiBenchmarkResult? single;
+    KiwiBenchmarkResult? batch;
+    for (final KiwiBenchmarkResult result in results) {
+      if (result.executionMode == KiwiBenchmarkExecutionMode.single) {
+        single = result;
+      } else if (result.executionMode == KiwiBenchmarkExecutionMode.batch) {
+        batch = result;
+      }
+    }
+    if (single != null && batch != null) {
+      final double throughputRatio = _safeRatio(
+        batch.analysesPerSec,
+        single.analysesPerSec,
+      );
+      final double latencyRatio = _safeRatio(
+        single.avgLatencyMs,
+        batch.avgLatencyMs,
+      );
+      buffer
+        ..writeln('| --- | ---: | ---: | ---: |')
+        ..writeln(
+          '| batch/single 배율 | - | '
+          '${throughputRatio.toStringAsFixed(2)}x | '
+          '${latencyRatio.toStringAsFixed(2)}x |',
+        );
+    }
+    return buffer.toString().trimRight();
+  }
+
+  double _safeRatio(double numerator, double denominator) {
+    if (denominator <= 0) {
+      return 0;
+    }
+    return numerator / denominator;
+  }
+
   String _formatBenchmarkResult(KiwiBenchmarkResult result) {
     final String analyzeImplSummary = result.isTokenCountBenchmark
         ? 'token_count (토큰 수 전용, JSON 역직렬화 제외)'
@@ -250,6 +440,7 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
       ..writeln('문장 수: ${result.sentenceCount}')
       ..writeln('워밍업/측정: ${result.warmupRuns} / ${result.measureRuns} 회')
       ..writeln('topN: ${result.topN}')
+      ..writeln('실행 모드: ${result.executionMode.label}')
       ..writeln('측정 방식: $analyzeImplSummary')
       ..writeln('초기화 시간: ${result.initMs.toStringAsFixed(2)} ms')
       ..writeln('총 측정 시간: ${result.elapsedMs.toStringAsFixed(2)} ms')
@@ -301,8 +492,8 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
     return buffer.toString().trimRight();
   }
 
-  String _formatBenchmarkResultAsJson(KiwiBenchmarkResult result) {
-    final Map<String, Object> payload = <String, Object>{
+  Map<String, Object> _benchmarkResultToJson(KiwiBenchmarkResult result) {
+    return <String, Object>{
       'generated_at_utc': result.generatedAtUtc.toIso8601String(),
       'native_version': result.nativeVersion,
       'sentence_count': result.sentenceCount,
@@ -310,6 +501,7 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
       'measure_runs': result.measureRuns,
       'top_n': result.topN,
       'analyze_impl': result.analyzeImpl,
+      'execution_mode': result.executionMode.label,
       'init_ms': result.initMs,
       'elapsed_ms': result.elapsedMs,
       'pure_elapsed_ms': result.pureElapsedMs,
@@ -338,6 +530,13 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
             },
           )
           .toList(growable: false),
+    };
+  }
+
+  String _formatBenchmarkResultsAsJson(List<KiwiBenchmarkResult> results) {
+    final Map<String, Object> payload = <String, Object>{
+      'run_count': results.length,
+      'results': results.map(_benchmarkResultToJson).toList(growable: false),
     };
     return const JsonEncoder.withIndent('  ').convert(payload);
   }
@@ -861,4 +1060,10 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
       ),
     );
   }
+}
+
+class _BenchmarkRunOptions {
+  const _BenchmarkRunOptions({required this.executionModes});
+
+  final List<KiwiBenchmarkExecutionMode> executionModes;
 }

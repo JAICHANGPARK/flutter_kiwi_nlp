@@ -17,6 +17,8 @@ import 'kiwi_result_row.dart';
 const String _benchmarkCorpusAssetPath = 'assets/benchmark_corpus_ko.txt';
 const String _benchmarkAnalyzeImplJson = 'json';
 const String _benchmarkAnalyzeImplTokenCount = 'token_count';
+const String _benchmarkExecutionModeSingle = 'single';
+const String _benchmarkExecutionModeBatch = 'batch';
 const int _benchmarkDefaultSampleCount = 10;
 const String _defaultAssetModelPath = 'assets/kiwi-models/cong/base';
 const String _defaultPackageAssetModelPath =
@@ -32,6 +34,21 @@ const List<String> _benchmarkModelFileNames = <String>[
   'typo.dict',
 ];
 
+enum KiwiBenchmarkExecutionMode {
+  single,
+  batch;
+
+  String get wireValue => switch (this) {
+    KiwiBenchmarkExecutionMode.single => _benchmarkExecutionModeSingle,
+    KiwiBenchmarkExecutionMode.batch => _benchmarkExecutionModeBatch,
+  };
+
+  String get label => switch (this) {
+    KiwiBenchmarkExecutionMode.single => 'single',
+    KiwiBenchmarkExecutionMode.batch => 'batch',
+  };
+}
+
 class KiwiBenchmarkResult {
   const KiwiBenchmarkResult({
     required this.generatedAtUtc,
@@ -41,6 +58,7 @@ class KiwiBenchmarkResult {
     required this.measureRuns,
     required this.topN,
     required this.analyzeImpl,
+    required this.executionMode,
     required this.initMs,
     required this.elapsedMs,
     required this.pureElapsedMs,
@@ -58,6 +76,7 @@ class KiwiBenchmarkResult {
   final int measureRuns;
   final int topN;
   final String analyzeImpl;
+  final KiwiBenchmarkExecutionMode executionMode;
   final double initMs;
   final double elapsedMs;
   final double pureElapsedMs;
@@ -467,6 +486,7 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
     int? topN,
     bool useTokenCount = true,
     int sampleCount = _benchmarkDefaultSampleCount,
+    KiwiBenchmarkExecutionMode executionMode = KiwiBenchmarkExecutionMode.batch,
   }) async {
     if (_loading) {
       throw const KiwiException('다른 작업이 진행 중입니다. 현재 작업이 끝난 뒤 다시 시도하세요.');
@@ -493,6 +513,7 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
         'topN': resolvedTopN,
         'matchOptions': matchOptions,
         'analyzeImpl': analyzeImpl,
+        'executionMode': executionMode.wireValue,
         'sampleCount': resolvedSampleCount,
       };
       final Map<String, Object?> rawResult = kIsWeb
@@ -511,6 +532,9 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
         measureRuns: _toInt(rawResult['measureRuns']),
         topN: _toInt(rawResult['topN']),
         analyzeImpl: _normalizeBenchmarkAnalyzeImpl(rawResult['analyzeImpl']),
+        executionMode: _normalizeBenchmarkExecutionMode(
+          rawResult['executionMode'],
+        ),
         initMs: _toDouble(rawResult['initMs']),
         elapsedMs: _toDouble(rawResult['elapsedMs']),
         pureElapsedMs: _toDouble(rawResult['pureElapsedMs']),
@@ -1097,6 +1121,8 @@ Future<Map<String, Object?>> _runBenchmarkInBackground(
   final String analyzeImpl = _normalizeBenchmarkAnalyzeImpl(
     payload['analyzeImpl'],
   );
+  final KiwiBenchmarkExecutionMode executionMode =
+      _normalizeBenchmarkExecutionMode(payload['executionMode']);
   final String secondaryImpl = analyzeImpl == _benchmarkAnalyzeImplJson
       ? _benchmarkAnalyzeImplTokenCount
       : _benchmarkAnalyzeImplJson;
@@ -1120,6 +1146,7 @@ Future<Map<String, Object?>> _runBenchmarkInBackground(
       runs: warmupRuns,
       options: options,
       analyzeImpl: analyzeImpl,
+      executionMode: executionMode,
     );
     final Map<String, num> primaryMeasured =
         await _runBenchmarkPassInBackground(
@@ -1128,6 +1155,7 @@ Future<Map<String, Object?>> _runBenchmarkInBackground(
           runs: measureRuns,
           options: options,
           analyzeImpl: analyzeImpl,
+          executionMode: executionMode,
         );
     await _runBenchmarkPassInBackground(
       analyzer: analyzer,
@@ -1135,6 +1163,7 @@ Future<Map<String, Object?>> _runBenchmarkInBackground(
       runs: warmupRuns,
       options: options,
       analyzeImpl: secondaryImpl,
+      executionMode: executionMode,
     );
     final Map<String, num> secondaryMeasured =
         await _runBenchmarkPassInBackground(
@@ -1143,6 +1172,7 @@ Future<Map<String, Object?>> _runBenchmarkInBackground(
           runs: measureRuns,
           options: options,
           analyzeImpl: secondaryImpl,
+          executionMode: executionMode,
         );
     final Map<String, num> fullMeasured =
         analyzeImpl == _benchmarkAnalyzeImplJson
@@ -1167,6 +1197,7 @@ Future<Map<String, Object?>> _runBenchmarkInBackground(
       'measureRuns': measureRuns,
       'topN': topN,
       'analyzeImpl': analyzeImpl,
+      'executionMode': executionMode.wireValue,
       'initMs': initStopwatch.elapsedMicroseconds / 1000.0,
       'elapsedMs': primaryMeasured['elapsedMs'] ?? 0.0,
       'pureElapsedMs': pureMeasured['elapsedMs'] ?? 0.0,
@@ -1187,6 +1218,7 @@ Future<Map<String, num>> _runBenchmarkPassInBackground({
   required int runs,
   required KiwiAnalyzeOptions options,
   required String analyzeImpl,
+  required KiwiBenchmarkExecutionMode executionMode,
 }) async {
   int totalAnalyses = 0;
   int totalChars = 0;
@@ -1204,26 +1236,53 @@ Future<Map<String, num>> _runBenchmarkPassInBackground({
 
   final Stopwatch stopwatch = Stopwatch()..start();
   if (useTokenCount) {
-    totalAnalyses = sentenceCount * runs;
-    totalChars = charsPerRun * runs;
-    totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
-      sentenceTexts,
-      runs: runs,
-      options: options,
-    );
-  } else {
-    for (int pass = 0; pass < runs; pass += 1) {
-      final List<KiwiAnalyzeResult> results = await analyzer.analyzeBatch(
+    if (executionMode == KiwiBenchmarkExecutionMode.batch) {
+      totalAnalyses = sentenceCount * runs;
+      totalChars = charsPerRun * runs;
+      totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
         sentenceTexts,
+        runs: runs,
         options: options,
       );
-      if (results.length != sentenceCount) {
-        throw const KiwiException('예상과 다른 분석 결과 개수가 반환되었습니다.');
+    } else {
+      for (int pass = 0; pass < runs; pass += 1) {
+        for (final _BenchmarkSentenceInBackground sentence in sentences) {
+          totalAnalyses += 1;
+          totalChars += sentence.runeLength;
+          totalTokens += await analyzer.analyzeTokenCount(
+            sentence.text,
+            options: options,
+          );
+        }
       }
-      totalAnalyses += sentenceCount;
-      totalChars += charsPerRun;
-      for (final KiwiAnalyzeResult result in results) {
-        totalTokens += _tokenCountFromAnalyze(result);
+    }
+  } else {
+    if (executionMode == KiwiBenchmarkExecutionMode.batch) {
+      for (int pass = 0; pass < runs; pass += 1) {
+        final List<KiwiAnalyzeResult> results = await analyzer.analyzeBatch(
+          sentenceTexts,
+          options: options,
+        );
+        if (results.length != sentenceCount) {
+          throw const KiwiException('예상과 다른 분석 결과 개수가 반환되었습니다.');
+        }
+        totalAnalyses += sentenceCount;
+        totalChars += charsPerRun;
+        for (final KiwiAnalyzeResult result in results) {
+          totalTokens += _tokenCountFromAnalyze(result);
+        }
+      }
+    } else {
+      for (int pass = 0; pass < runs; pass += 1) {
+        for (final _BenchmarkSentenceInBackground sentence in sentences) {
+          final KiwiAnalyzeResult result = await analyzer.analyze(
+            sentence.text,
+            options: options,
+          );
+          totalAnalyses += 1;
+          totalChars += sentence.runeLength;
+          totalTokens += _tokenCountFromAnalyze(result);
+        }
       }
     }
   }
@@ -1303,6 +1362,14 @@ String _normalizeBenchmarkAnalyzeImpl(Object? value) {
     return _benchmarkAnalyzeImplTokenCount;
   }
   return _benchmarkAnalyzeImplJson;
+}
+
+KiwiBenchmarkExecutionMode _normalizeBenchmarkExecutionMode(Object? value) {
+  final String raw = value?.toString().trim().toLowerCase() ?? '';
+  if (raw == _benchmarkExecutionModeSingle) {
+    return KiwiBenchmarkExecutionMode.single;
+  }
+  return KiwiBenchmarkExecutionMode.batch;
 }
 
 List<KiwiBenchmarkSampleOutput> _parseBenchmarkSamples(Object? value) {
