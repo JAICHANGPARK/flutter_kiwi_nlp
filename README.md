@@ -16,12 +16,7 @@ Korean morphological analysis plugin for Flutter powered by Kiwi.
 - Korean: [`README.ko.md`](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/README.ko.md)
 - English: [`README.en.md`](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/README.en.md)
 - LLM index: [`llms.txt`](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/llms.txt)
-- Technical Report (English PDF):
-  [`doc/technical_report_arxiv.pdf`](doc/technical_report_arxiv.pdf)
-- Technical Report (English PDF, GitHub):
-  [`doc/technical_report_arxiv.pdf`](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/doc/technical_report_arxiv.pdf)
-- Technical Report source (arXiv-style LaTeX):
-  [`doc/technical_report_arxiv.tex`](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/doc/technical_report_arxiv.tex)
+- Technical Report (English PDF): [`doc/technical_report_arxiv.pdf`](doc/technical_report_arxiv.pdf)
 - Repository skill:
   [`skills/flutter-kiwi-nlp/SKILL.md`](https://github.com/JAICHANGPARK/flutter_kiwi_nlp/blob/main/skills/flutter-kiwi-nlp/SKILL.md)
 
