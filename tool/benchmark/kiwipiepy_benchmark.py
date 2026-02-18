@@ -192,7 +192,9 @@ def load_sentences(path: Path) -> list[str]:
     if not path.exists():
         raise FileNotFoundError(f'Corpus not found: {path}')
 
-    sentences = [line.strip() for line in path.read_text().splitlines()]
+    sentences = [
+        line.strip() for line in path.read_text(encoding='utf-8').splitlines()
+    ]
     sentences = [line for line in sentences if line]
 
     if not sentences:
@@ -487,7 +489,8 @@ def main() -> int:
     if config.output_path is not None:
         config.output_path.parent.mkdir(parents=True, exist_ok=True)
         config.output_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2)
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding='utf-8',
         )
 
     return 0

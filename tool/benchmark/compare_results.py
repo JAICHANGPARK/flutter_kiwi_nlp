@@ -44,7 +44,7 @@ def load_trials(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f'Result file not found: {path}')
 
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding='utf-8'))
     if isinstance(raw, dict):
         return [raw]
     if isinstance(raw, list) and raw and all(isinstance(x, dict) for x in raw):
@@ -560,7 +560,7 @@ def main() -> int:
     report = build_report(flutter_trials, kiwi_trials)
 
     args.output_md.parent.mkdir(parents=True, exist_ok=True)
-    args.output_md.write_text(report)
+    args.output_md.write_text(report, encoding='utf-8')
 
     print(f'Report written: {args.output_md}')
     return 0

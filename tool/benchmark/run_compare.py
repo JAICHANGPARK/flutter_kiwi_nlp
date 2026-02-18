@@ -220,7 +220,7 @@ def run_flutter_benchmark(
         if output_json_path is None or not output_json_path.exists():
             return None
         try:
-            parsed = json.loads(output_json_path.read_text())
+            parsed = json.loads(output_json_path.read_text(encoding='utf-8'))
         except (json.JSONDecodeError, OSError):
             return None
         if isinstance(parsed, dict):
@@ -567,7 +567,8 @@ def main() -> int:
         )
         flutter_trials.append(flutter_payload)
         flutter_trial_json.write_text(
-            json.dumps(flutter_payload, ensure_ascii=False, indent=2)
+            json.dumps(flutter_payload, ensure_ascii=False, indent=2),
+            encoding='utf-8',
         )
 
         kiwi_trial_json = output_dir / f'kiwipiepy_benchmark_trial_{trial_id:02d}.json'
@@ -578,24 +579,28 @@ def main() -> int:
             str(kiwi_trial_json),
         ]
         run_command(trial_kiwi_command, cwd=repo_root)
-        kiwi_payload_raw = json.loads(kiwi_trial_json.read_text())
+        kiwi_payload_raw = json.loads(kiwi_trial_json.read_text(encoding='utf-8'))
         if not isinstance(kiwi_payload_raw, dict):
             raise TypeError('kiwipiepy benchmark payload must be a JSON object.')
         kiwi_trials.append(kiwi_payload_raw)
 
     flutter_trials_json.write_text(
-        json.dumps(flutter_trials, ensure_ascii=False, indent=2)
+        json.dumps(flutter_trials, ensure_ascii=False, indent=2),
+        encoding='utf-8',
     )
     kiwi_trials_json.write_text(
-        json.dumps(kiwi_trials, ensure_ascii=False, indent=2)
+        json.dumps(kiwi_trials, ensure_ascii=False, indent=2),
+        encoding='utf-8',
     )
 
     # Keep legacy single-run files for compatibility by writing the final trial.
     flutter_json.write_text(
-        json.dumps(flutter_trials[-1], ensure_ascii=False, indent=2)
+        json.dumps(flutter_trials[-1], ensure_ascii=False, indent=2),
+        encoding='utf-8',
     )
     kiwi_json.write_text(
-        json.dumps(kiwi_trials[-1], ensure_ascii=False, indent=2)
+        json.dumps(kiwi_trials[-1], ensure_ascii=False, indent=2),
+        encoding='utf-8',
     )
 
     report_command = [
