@@ -25,6 +25,8 @@ class BenchmarkConfig:
     build_options: int
     create_match_options: int
     analyze_match_options: int
+    analyze_impl: str
+    sample_count: int
     trial_id: int
     model_path: str
 
@@ -42,6 +44,8 @@ LOAD_DEFAULT_DICT = 2
 LOAD_TYPO_DICT = 4
 LOAD_MULTI_DICT = 8
 MODEL_TYPE_MASK = 0x0F00
+_ANALYZE_IMPL_ANALYZE = 'analyze'
+_ANALYZE_IMPL_TOKENIZE = 'tokenize'
 
 MODEL_TYPE_MAP: dict[int, str | None] = {
     0x0000: None,
@@ -125,10 +129,22 @@ def parse_args() -> BenchmarkConfig:
         help='Bitwise match option value passed to `Kiwi.analyze(match_options=...)`.',
     )
     parser.add_argument(
+        '--analyze-impl',
+        choices=(_ANALYZE_IMPL_ANALYZE, _ANALYZE_IMPL_TOKENIZE),
+        default=_ANALYZE_IMPL_ANALYZE,
+        help='kiwipiepy benchmark API path: analyze(top_n) or tokenize().',
+    )
+    parser.add_argument(
         '--trial-id',
         type=int,
         default=0,
         help='Optional trial id for repeated-measurement orchestration.',
+    )
+    parser.add_argument(
+        '--sample-count',
+        type=int,
+        default=10,
+        help='Number of sample sentences to include with POS outputs.',
     )
     parser.add_argument(
         '--model-path',
@@ -152,6 +168,8 @@ def parse_args() -> BenchmarkConfig:
         parser.error('--analyze-match-options must be >= 0')
     if args.trial_id < 0:
         parser.error('--trial-id must be >= 0')
+    if args.sample_count < 0:
+        parser.error('--sample-count must be >= 0')
 
     return BenchmarkConfig(
         corpus_path=args.corpus,
@@ -163,6 +181,8 @@ def parse_args() -> BenchmarkConfig:
         build_options=args.build_options,
         create_match_options=args.create_match_options,
         analyze_match_options=args.analyze_match_options,
+        analyze_impl=args.analyze_impl,
+        sample_count=args.sample_count,
         trial_id=args.trial_id,
         model_path=args.model_path,
     )
@@ -214,11 +234,12 @@ def create_kiwi(config: BenchmarkConfig) -> Any:
 
 def run_measurement(
     kiwi: Any,
-    sentences: list[str],
+    sentence_rows: list[tuple[str, int]],
     *,
     runs: int,
     top_n: int,
     match_options: int,
+    analyze_impl: str,
 ) -> RunStats:
     total_analyses = 0
     total_chars = 0
@@ -227,15 +248,17 @@ def run_measurement(
     started = time.perf_counter()
 
     for _ in range(runs):
-        for sentence in sentences:
-            result = kiwi.analyze(
+        for sentence, sentence_chars in sentence_rows:
+            tokens = analyze_sentence_tokens(
+                kiwi,
                 sentence,
                 top_n=top_n,
                 match_options=match_options,
+                analyze_impl=analyze_impl,
             )
             total_analyses += 1
-            total_chars += len(sentence)
-            total_tokens += count_best_candidate_tokens(result)
+            total_chars += sentence_chars
+            total_tokens += len(tokens)
 
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     return RunStats(
@@ -246,21 +269,125 @@ def run_measurement(
     )
 
 
-def count_best_candidate_tokens(result: Any) -> int:
+def analyze_sentence_tokens(
+    kiwi: Any,
+    sentence: str,
+    *,
+    top_n: int,
+    match_options: int,
+    analyze_impl: str,
+) -> list[Any]:
+    if analyze_impl == _ANALYZE_IMPL_TOKENIZE:
+        return extract_tokenize_tokens(
+            kiwi.tokenize(
+                sentence,
+                match_options=match_options,
+            )
+        )
+    return extract_best_candidate_tokens(
+        kiwi.analyze(
+            sentence,
+            top_n=top_n,
+            match_options=match_options,
+        )
+    )
+
+
+def extract_best_candidate_tokens(result: Any) -> list[Any]:
     if not result:
-        return 0
+        return []
 
     first_candidate = result[0]
     if isinstance(first_candidate, tuple) and first_candidate:
         tokens = first_candidate[0]
-        if hasattr(tokens, '__len__'):
-            return len(tokens)
+        try:
+            return list(tokens)
+        except TypeError:
+            return []
 
     tokens = getattr(first_candidate, 'tokens', None)
-    if tokens is not None and hasattr(tokens, '__len__'):
-        return len(tokens)
+    if tokens is not None:
+        try:
+            return list(tokens)
+        except TypeError:
+            return []
 
-    return 0
+    return []
+
+
+def extract_tokenize_tokens(result: Any) -> list[Any]:
+    if result is None:
+        return []
+
+    if isinstance(result, list):
+        if result and isinstance(result[0], list):
+            return list(result[0])
+        return list(result)
+
+    try:
+        tokens = list(result)
+    except TypeError:
+        return []
+
+    if tokens and isinstance(tokens[0], list):
+        return list(tokens[0])
+    return tokens
+
+
+def token_to_pair(token: Any) -> tuple[str, str]:
+    if isinstance(token, tuple):
+        form = str(token[0]) if len(token) > 0 else ''
+        tag = str(token[1]) if len(token) > 1 else ''
+        return form, tag
+
+    form_any = getattr(token, 'form', None)
+    tag_any = getattr(token, 'tag', None)
+    form = str(form_any) if form_any is not None else str(token)
+    tag = str(tag_any) if tag_any is not None else ''
+    return form, tag
+
+
+def build_top1_text(tokens: list[Any]) -> str:
+    if not tokens:
+        return '(결과 없음)'
+    parts: list[str] = []
+    for token in tokens:
+        form, tag = token_to_pair(token)
+        parts.append(f'{form}/{tag}' if tag else form)
+    return ' '.join(parts)
+
+
+def collect_sample_outputs(
+    kiwi: Any,
+    sentences: list[str],
+    *,
+    sample_count: int,
+    top_n: int,
+    match_options: int,
+    analyze_impl: str,
+) -> list[dict[str, Any]]:
+    if sample_count <= 0 or not sentences:
+        return []
+
+    limit = min(sample_count, len(sentences))
+    outputs: list[dict[str, Any]] = []
+    for index in range(limit):
+        sentence = sentences[index]
+        tokens = analyze_sentence_tokens(
+            kiwi,
+            sentence,
+            top_n=top_n,
+            match_options=match_options,
+            analyze_impl=analyze_impl,
+        )
+        outputs.append(
+            {
+                'sentence': sentence,
+                'top1_text': build_top1_text(tokens),
+                'top1_token_count': len(tokens),
+            }
+        )
+    return outputs
 
 
 def safe_divide(numerator: float, denominator: float) -> float:
@@ -275,6 +402,7 @@ def to_payload(
     sentence_count: int,
     init_ms: float,
     stats: RunStats,
+    sample_outputs: list[dict[str, Any]],
 ) -> dict[str, Any]:
     elapsed_seconds = stats.elapsed_ms / 1000.0
     return {
@@ -288,9 +416,11 @@ def to_payload(
         'build_options': config.build_options,
         'create_match_options': config.create_match_options,
         'analyze_match_options': config.analyze_match_options,
+        'analyze_impl': config.analyze_impl,
         'trial_id': config.trial_id,
         'model_type': resolve_model_type(config.build_options) or 'none',
         'sentence_count': sentence_count,
+        'sample_count': len(sample_outputs),
         'init_ms': init_ms,
         'elapsed_ms': stats.elapsed_ms,
         'total_analyses': stats.total_analyses,
@@ -304,12 +434,14 @@ def to_payload(
             stats.elapsed_ms * 1000.0,
             stats.total_tokens,
         ),
+        'sample_outputs': sample_outputs,
     }
 
 
 def main() -> int:
     config = parse_args()
     sentences = load_sentences(config.corpus_path)
+    sentence_rows = [(sentence, len(sentence)) for sentence in sentences]
 
     init_started = time.perf_counter()
     kiwi = create_kiwi(config)
@@ -317,18 +449,28 @@ def main() -> int:
 
     run_measurement(
         kiwi,
-        sentences,
+        sentence_rows,
         runs=config.warmup_runs,
         top_n=config.top_n,
         match_options=config.analyze_match_options,
+        analyze_impl=config.analyze_impl,
     )
 
     stats = run_measurement(
         kiwi,
-        sentences,
+        sentence_rows,
         runs=config.measure_runs,
         top_n=config.top_n,
         match_options=config.analyze_match_options,
+        analyze_impl=config.analyze_impl,
+    )
+    sample_outputs = collect_sample_outputs(
+        kiwi,
+        sentences,
+        sample_count=config.sample_count,
+        top_n=config.top_n,
+        match_options=config.analyze_match_options,
+        analyze_impl=config.analyze_impl,
     )
 
     payload = to_payload(
@@ -336,6 +478,7 @@ def main() -> int:
         sentence_count=len(sentences),
         init_ms=init_ms,
         stats=stats,
+        sample_outputs=sample_outputs,
     )
 
     encoded = json.dumps(payload, ensure_ascii=False)

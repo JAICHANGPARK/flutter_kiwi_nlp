@@ -1,3 +1,4 @@
+// Verifies native analyzer behavior with controllable fake FFI bindings.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
@@ -14,16 +15,20 @@ import 'package:flutter_kiwi_nlp/src/kiwi_model_assets.dart';
 import 'package:flutter_kiwi_nlp/src/kiwi_options.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// Allocates a C string for fake native callbacks that return `char*`.
 ffi.Pointer<ffi.Char> _toCharPointer(String value) {
   return value.toNativeUtf8().cast<ffi.Char>();
 }
 
+// Test double for [KiwiNativeBindings] with configurable call results.
 class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   ffi.Pointer<flutter_kiwi_ffi_handle_t> initHandle =
       ffi.Pointer<flutter_kiwi_ffi_handle_t>.fromAddress(1);
   bool returnNullVersion = false;
   bool returnNullAnalyze = false;
   bool returnNullLastError = false;
+  int analyzeTokenCountStatus = 0;
+  int analyzeTokenCountValue = 0;
   int addUserWordStatus = 0;
   int closeStatus = 0;
   String lastErrorText = 'fake-native-error';
@@ -40,6 +45,9 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   int? analyzeTopN;
   int? analyzeMatchOptions;
   String? analyzeText;
+  int? analyzeTokenCountTopN;
+  int? analyzeTokenCountMatchOptions;
+  String? analyzeTokenCountText;
   String? addWord;
   String? addTag;
   double? addScore;
@@ -86,6 +94,21 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   }
 
   @override
+  int flutter_kiwi_ffi_analyze_token_count(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Char> text,
+    int topN,
+    int matchOptions,
+    ffi.Pointer<ffi.Int32> outTokenCount,
+  ) {
+    analyzeTokenCountText = text.cast<Utf8>().toDartString();
+    analyzeTokenCountTopN = topN;
+    analyzeTokenCountMatchOptions = matchOptions;
+    outTokenCount.value = analyzeTokenCountValue;
+    return analyzeTokenCountStatus;
+  }
+
+  @override
   int flutter_kiwi_ffi_add_user_word(
     ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
     ffi.Pointer<ffi.Char> word,
@@ -126,6 +149,7 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
     return _versionPointer!;
   }
 
+  // Releases cached C strings allocated by this fake backend.
   void dispose() {
     if (_lastErrorPointer != null) {
       malloc.free(_lastErrorPointer!.cast<Utf8>());
@@ -138,6 +162,7 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   }
 }
 
+// Matches [KiwiException] values with an exact [message].
 Matcher kiwiExceptionMessage(String message) {
   return isA<KiwiException>().having(
     (KiwiException error) => error.message,
@@ -146,6 +171,7 @@ Matcher kiwiExceptionMessage(String message) {
   );
 }
 
+// Installs a mock asset-channel handler backed by [assets].
 Future<void> _setAssetHandler(Map<String, Uint8List> assets) async {
   final TestWidgetsFlutterBinding binding =
       TestWidgetsFlutterBinding.ensureInitialized();
@@ -166,12 +192,14 @@ Future<void> _setAssetHandler(Map<String, Uint8List> assets) async {
   });
 }
 
+// Removes the mock asset-channel handler.
 Future<void> _clearAssetHandler() async {
   final TestWidgetsFlutterBinding binding =
       TestWidgetsFlutterBinding.ensureInitialized();
   binding.defaultBinaryMessenger.setMockMessageHandler('flutter/assets', null);
 }
 
+// Creates a complete cached model directory that satisfies file-size guards.
 Future<Directory> _prepareCachedModelDirectory() async {
   final Directory modelDirectory = Directory(
     '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/'
@@ -189,6 +217,7 @@ Future<Directory> _prepareCachedModelDirectory() async {
   return modelDirectory;
 }
 
+// Deletes [path] recursively when it exists.
 Future<void> _deleteDirectoryIfExists(String path) async {
   final Directory directory = Directory(path);
   if (directory.existsSync()) {
@@ -196,6 +225,7 @@ Future<void> _deleteDirectoryIfExists(String path) async {
   }
 }
 
+// Builds gzipped tar bytes for default-model download test scenarios.
 Uint8List _createGzipTarBytes(Map<String, List<int>> files) {
   final Archive archive = Archive();
   for (final MapEntry<String, List<int>> entry in files.entries) {
@@ -207,10 +237,22 @@ Uint8List _createGzipTarBytes(Map<String, List<int>> files) {
       ),
     );
   }
-  final List<int> tarBytes = TarEncoder().encode(archive)!;
-  return Uint8List.fromList(GZipEncoder().encode(tarBytes)!);
+  final List<int> tarBytes = TarEncoder().encode(archive);
+  return Uint8List.fromList(GZipEncoder().encode(tarBytes));
 }
 
+// Builds an archive payload that satisfies required model file-size guards.
+Map<String, List<int>> _createCompleteModelArchiveFiles() {
+  return <String, List<int>>{
+    for (final String fileName in kiwiModelFileNames)
+      'models/cong/base/$fileName': List<int>.filled(
+        kiwiMinModelFileBytes[fileName] ?? 1,
+        1,
+      ),
+  };
+}
+
+// Minimal streaming HTTP response for fake download tests.
 class _FakeHttpClientResponse extends Stream<List<int>>
     implements HttpClientResponse {
   _FakeHttpClientResponse(this.statusCode, this._chunks);
@@ -240,6 +282,40 @@ class _FakeHttpClientResponse extends Stream<List<int>>
   }
 }
 
+class _NoopEventSink<T> implements EventSink<T> {
+  @override
+  void add(T event) {}
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) {}
+
+  @override
+  void close() {}
+}
+
+// Response that forces stream-timeout callback execution.
+class _TimeoutHttpClientResponse extends _FakeHttpClientResponse {
+  _TimeoutHttpClientResponse() : super(HttpStatus.ok, const <List<int>>[]);
+
+  @override
+  Stream<List<int>> timeout(
+    Duration timeLimit, {
+    void Function(EventSink<List<int>> sink)? onTimeout,
+  }) {
+    if (onTimeout == null) {
+      return super.timeout(timeLimit);
+    }
+    Object error = TimeoutException('timed out');
+    try {
+      onTimeout(_NoopEventSink<List<int>>());
+    } catch (caught) {
+      error = caught;
+    }
+    return Stream<List<int>>.error(error);
+  }
+}
+
+// Minimal HTTP request wrapper that returns a predefined response.
 class _FakeHttpClientRequest implements HttpClientRequest {
   _FakeHttpClientRequest(this._response);
 
@@ -256,6 +332,7 @@ class _FakeHttpClientRequest implements HttpClientRequest {
   }
 }
 
+// Minimal [HttpClient] implementation with injectable `getUrl` behavior.
 class _FakeHttpClient implements HttpClient {
   _FakeHttpClient({required this.onGetUrl});
 
@@ -442,6 +519,44 @@ void main() {
     await analyzer.close();
   });
 
+  test(
+    'analyzeTokenCount forwards arguments and returns token count',
+    () async {
+      fakeBindings.analyzeTokenCountValue = 7;
+      final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+        modelPath: '/tmp/model_path',
+      );
+
+      final int tokenCount = await analyzer.analyzeTokenCount(
+        '토큰개수',
+        options: const KiwiAnalyzeOptions(
+          topN: 2,
+          matchOptions: KiwiMatchOption.url,
+        ),
+      );
+
+      expect(tokenCount, 7);
+      expect(fakeBindings.analyzeTokenCountText, '토큰개수');
+      expect(fakeBindings.analyzeTokenCountTopN, 2);
+      expect(fakeBindings.analyzeTokenCountMatchOptions, KiwiMatchOption.url);
+      await analyzer.close();
+    },
+  );
+
+  test('analyzeTokenCount throws on native error', () async {
+    fakeBindings.analyzeTokenCountStatus = -1;
+    fakeBindings.lastErrorText = 'analyze-token-count failed';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    await expectLater(
+      analyzer.analyzeTokenCount('abc'),
+      throwsA(kiwiExceptionMessage('analyze-token-count failed')),
+    );
+    await analyzer.close();
+  });
+
   test('addUserWord forwards arguments and handles error status', () async {
     final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
       modelPath: '/tmp/model_path',
@@ -473,6 +588,14 @@ void main() {
 
     await expectLater(
       analyzer.analyze('abc'),
+      throwsA(
+        kiwiExceptionMessage(
+          'KiwiAnalyzer is already closed. Create a new instance.',
+        ),
+      ),
+    );
+    await expectLater(
+      analyzer.analyzeTokenCount('abc'),
       throwsA(
         kiwiExceptionMessage(
           'KiwiAnalyzer is already closed. Create a new instance.',
@@ -652,6 +775,139 @@ void main() {
             (KiwiException error) => error.message,
             'message',
             contains('Failed to download default model (500)'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test('debug probes expose native candidate and loaded path state', () {
+    expect(debugKiwiNativeLibraryCandidatesForTest(), isNotEmpty);
+    expect(
+      debugKiwiNativeLoadedLibraryCandidateForTest(),
+      anyOf(isNull, isA<String>()),
+    );
+  });
+
+  test(
+    'create auto-detects model path from bundled asset candidates',
+    () async {
+      final Map<String, Uint8List> assets = <String, Uint8List>{
+        for (final MapEntry<String, List<int>> entry
+            in _createCompleteModelArchiveFiles().entries)
+          'assets/kiwi-models/cong/base/${entry.key.split('/').last}':
+              Uint8List.fromList(entry.value),
+      };
+      await _setAssetHandler(assets);
+
+      final KiwiAnalyzer analyzer = await KiwiAnalyzer.create();
+      final String modelPath = fakeBindings.initModelPath!;
+
+      expect(Directory(modelPath).existsSync(), isTrue);
+      for (final String fileName in kiwiModelFileNames) {
+        expect(File('$modelPath/$fileName').existsSync(), isTrue);
+      }
+      await analyzer.close();
+    },
+  );
+
+  test('create retries download when archive extraction throws', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    await _deleteDirectoryIfExists(
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+    );
+    final Uint8List invalidArchiveBytes = Uint8List.fromList(<int>[1, 2, 3]);
+    int requestCount = 0;
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) async {
+          requestCount += 1;
+          return _FakeHttpClientResponse(HttpStatus.ok, <List<int>>[
+            invalidArchiveBytes,
+          ]);
+        },
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: '',
+    );
+
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        isA<KiwiException>().having(
+          (KiwiException error) => error.message,
+          'message',
+          contains('Failed to extract default model archive'),
+        ),
+      ),
+    );
+    expect(requestCount, greaterThanOrEqualTo(2));
+  });
+
+  test('create replaces stale partial/archive files and succeeds', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    final String cacheRootPath =
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base';
+    await _deleteDirectoryIfExists(cacheRootPath);
+    final Directory cacheRoot = Directory(cacheRootPath);
+    await cacheRoot.create(recursive: true);
+    final File archive = File('$cacheRootPath/model.tgz');
+    final File partial = File('$cacheRootPath/model.tgz.part');
+    await archive.writeAsBytes(const <int>[]); // zero-byte stale archive
+    await partial.writeAsBytes(const <int>[1, 2, 3]); // stale partial
+
+    final Uint8List archiveBytes = _createGzipTarBytes(
+      _createCompleteModelArchiveFiles(),
+    );
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) async {
+          return _FakeHttpClientResponse(HttpStatus.ok, <List<int>>[
+            archiveBytes,
+          ]);
+        },
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: '',
+    );
+
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create();
+    expect(fakeBindings.initModelPath, '$cacheRootPath/models/cong/base');
+    expect(archive.existsSync(), isTrue);
+    expect(partial.existsSync(), isFalse);
+    await analyzer.close();
+  });
+
+  test(
+    'create reports stalled stream timeout with actionable message',
+    () async {
+      await _setAssetHandler(<String, Uint8List>{});
+      await _deleteDirectoryIfExists(
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+      );
+      debugSetKiwiNativeHttpClientFactoryForTest(
+        () => _FakeHttpClient(
+          onGetUrl: (Uri uri) async {
+            return _TimeoutHttpClientResponse();
+          },
+        ),
+      );
+      debugSetKiwiNativeArchiveOverridesForTest(
+        archiveUrl: 'http://local.test/model.tgz',
+        archiveSha256: '',
+      );
+
+      await expectLater(
+        KiwiAnalyzer.create(),
+        throwsA(
+          isA<KiwiException>().having(
+            (KiwiException error) => error.message,
+            'message',
+            contains('Failed to download default model'),
           ),
         ),
       );

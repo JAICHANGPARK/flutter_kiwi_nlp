@@ -1,3 +1,4 @@
+// Verifies normalization and integrity helpers for Kiwi model asset handling.
 import 'package:flutter_kiwi_nlp/src/kiwi_model_assets.dart';
 import 'package:flutter_test/flutter_test.dart';
 

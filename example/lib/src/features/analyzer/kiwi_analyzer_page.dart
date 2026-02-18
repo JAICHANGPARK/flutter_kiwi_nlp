@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -189,6 +190,7 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
 
   Future<void> _showBenchmarkResultDialog(KiwiBenchmarkResult result) async {
     final String summary = _formatBenchmarkResult(result);
+    final String jsonPayload = _formatBenchmarkResultAsJson(result);
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -211,11 +213,22 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
                 await Clipboard.setData(ClipboardData(text: summary));
                 if (!mounted) return;
                 ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('벤치마크 결과를 복사했습니다.')),
+                  const SnackBar(content: Text('벤치마크 요약을 복사했습니다.')),
                 );
               },
               icon: const Icon(Icons.copy),
-              label: const Text('복사'),
+              label: const Text('요약 복사'),
+            ),
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: jsonPayload));
+                if (!mounted) return;
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('벤치마크 JSON을 복사했습니다.')),
+                );
+              },
+              icon: const Icon(Icons.data_object_outlined),
+              label: const Text('JSON 복사'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -228,25 +241,105 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
   }
 
   String _formatBenchmarkResult(KiwiBenchmarkResult result) {
+    final String analyzeImplSummary = result.isTokenCountBenchmark
+        ? 'token_count (토큰 수 전용, JSON 역직렬화 제외)'
+        : 'json (전체 결과 역직렬화 포함)';
     final StringBuffer buffer = StringBuffer()
       ..writeln('실행 시각(UTC): ${result.generatedAtUtc.toIso8601String()}')
       ..writeln('Native 버전: ${result.nativeVersion}')
       ..writeln('문장 수: ${result.sentenceCount}')
       ..writeln('워밍업/측정: ${result.warmupRuns} / ${result.measureRuns} 회')
       ..writeln('topN: ${result.topN}')
+      ..writeln('측정 방식: $analyzeImplSummary')
       ..writeln('초기화 시간: ${result.initMs.toStringAsFixed(2)} ms')
       ..writeln('총 측정 시간: ${result.elapsedMs.toStringAsFixed(2)} ms')
+      ..writeln(
+        '순수 처리 시간(ms, token_count): ${result.pureElapsedMs.toStringAsFixed(2)}',
+      )
+      ..writeln(
+        '전체 처리 시간(ms, json): ${result.fullElapsedMs.toStringAsFixed(2)}',
+      )
+      ..writeln('JSON 오버헤드(ms): ${result.jsonOverheadMs.toStringAsFixed(2)}')
+      ..writeln(
+        'JSON 오버헤드 비율(%): ${(result.jsonOverheadRatio * 100.0).toStringAsFixed(2)}',
+      )
+      ..writeln(
+        'JSON 오버헤드/분석(ms): ${result.jsonOverheadPerAnalysisMs.toStringAsFixed(4)}',
+      )
+      ..writeln(
+        'JSON 오버헤드/토큰(us): ${result.jsonOverheadPerTokenUs.toStringAsFixed(4)}',
+      )
       ..writeln('총 분석 건수: ${result.totalAnalyses}')
       ..writeln('총 문자 수: ${result.totalChars}')
       ..writeln('총 토큰 수: ${result.totalTokens}')
       ..writeln('처리량(analyses/s): ${result.analysesPerSec.toStringAsFixed(2)}')
+      ..writeln(
+        '순수 처리량(analyses/s): ${result.pureAnalysesPerSec.toStringAsFixed(2)}',
+      )
+      ..writeln(
+        '전체 처리량(analyses/s): ${result.fullAnalysesPerSec.toStringAsFixed(2)}',
+      )
       ..writeln('처리량(chars/s): ${result.charsPerSec.toStringAsFixed(2)}')
       ..writeln('처리량(tokens/s): ${result.tokensPerSec.toStringAsFixed(2)}')
       ..writeln('평균 지연(ms): ${result.avgLatencyMs.toStringAsFixed(4)}')
       ..writeln(
         '토큰당 지연(us/token): ${result.avgTokenLatencyUs.toStringAsFixed(4)}',
       );
+    if (result.sampleOutputs.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('샘플 문장 품사 결과(앱 top1):');
+      for (int index = 0; index < result.sampleOutputs.length; index += 1) {
+        final KiwiBenchmarkSampleOutput sample = result.sampleOutputs[index];
+        buffer
+          ..writeln('${index + 1}. ${sample.sentence}')
+          ..writeln(
+            '   - top1(${sample.top1TokenCount} 토큰): ${sample.appTop1Text}',
+          );
+      }
+    }
     return buffer.toString().trimRight();
+  }
+
+  String _formatBenchmarkResultAsJson(KiwiBenchmarkResult result) {
+    final Map<String, Object> payload = <String, Object>{
+      'generated_at_utc': result.generatedAtUtc.toIso8601String(),
+      'native_version': result.nativeVersion,
+      'sentence_count': result.sentenceCount,
+      'warmup_runs': result.warmupRuns,
+      'measure_runs': result.measureRuns,
+      'top_n': result.topN,
+      'analyze_impl': result.analyzeImpl,
+      'init_ms': result.initMs,
+      'elapsed_ms': result.elapsedMs,
+      'pure_elapsed_ms': result.pureElapsedMs,
+      'full_elapsed_ms': result.fullElapsedMs,
+      'json_overhead_ms': result.jsonOverheadMs,
+      'json_overhead_ratio': result.jsonOverheadRatio,
+      'json_overhead_percent': result.jsonOverheadRatio * 100.0,
+      'json_overhead_per_analysis_ms': result.jsonOverheadPerAnalysisMs,
+      'json_overhead_per_token_us': result.jsonOverheadPerTokenUs,
+      'total_analyses': result.totalAnalyses,
+      'total_chars': result.totalChars,
+      'total_tokens': result.totalTokens,
+      'analyses_per_sec': result.analysesPerSec,
+      'pure_analyses_per_sec': result.pureAnalysesPerSec,
+      'full_analyses_per_sec': result.fullAnalysesPerSec,
+      'chars_per_sec': result.charsPerSec,
+      'tokens_per_sec': result.tokensPerSec,
+      'avg_latency_ms': result.avgLatencyMs,
+      'avg_token_latency_us': result.avgTokenLatencyUs,
+      'sample_outputs': result.sampleOutputs
+          .map(
+            (KiwiBenchmarkSampleOutput sample) => <String, Object>{
+              'sentence': sample.sentence,
+              'top1_text': sample.appTop1Text,
+              'top1_token_count': sample.top1TokenCount,
+            },
+          )
+          .toList(growable: false),
+    };
+    return const JsonEncoder.withIndent('  ').convert(payload);
   }
 
   bool _isCompactWidth(double width) => width < _compactBreakpoint;

@@ -1,3 +1,4 @@
+// Verifies adapter behavior that wraps generated FFI bindings.
 import 'dart:ffi' as ffi;
 
 import 'package:ffi/ffi.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_kiwi_nlp/src/kiwi_analyzer_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _AdapterBindingStubs {
+  // Tracks native pointers that pass through free-string for leak checks.
   final Set<int> freedPointers = <int>{};
   final List<ffi.NativeCallable<dynamic>> _callables =
       <ffi.NativeCallable<dynamic>>[];
@@ -81,6 +83,36 @@ class _AdapterBindingStubs {
     ffi.Int32 Function(
       ffi.Pointer<flutter_kiwi_ffi_handle_t>,
       ffi.Pointer<ffi.Char>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Int32>,
+    )
+  >
+  _analyzeTokenCount = _track(
+    ffi.NativeCallable<
+      ffi.Int32 Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Char>,
+        ffi.Int32,
+        ffi.Int32,
+        ffi.Pointer<ffi.Int32>,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Char> text,
+      int topN,
+      int matchOptions,
+      ffi.Pointer<ffi.Int32> outTokenCount,
+    ) {
+      outTokenCount.value = 24;
+      return 0;
+    }, exceptionalReturn: -1),
+  );
+
+  late final ffi.NativeCallable<
+    ffi.Int32 Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Char>,
       ffi.Pointer<ffi.Char>,
       ffi.Float,
     )
@@ -135,10 +167,13 @@ class _AdapterBindingStubs {
   }
 
   ffi.Pointer<T> lookup<T extends ffi.NativeType>(String symbolName) {
+    // Exposes fake symbols so generated bindings can resolve function pointers.
     final ffi.Pointer<ffi.NativeType> pointer = switch (symbolName) {
       'flutter_kiwi_ffi_init' => _init.nativeFunction.cast(),
       'flutter_kiwi_ffi_close' => _close.nativeFunction.cast(),
       'flutter_kiwi_ffi_analyze_json' => _analyze.nativeFunction.cast(),
+      'flutter_kiwi_ffi_analyze_token_count' =>
+        _analyzeTokenCount.nativeFunction.cast(),
       'flutter_kiwi_ffi_add_user_word' => _addWord.nativeFunction.cast(),
       'flutter_kiwi_ffi_free_string' => _freeString.nativeFunction.cast(),
       'flutter_kiwi_ffi_last_error' => _lastError.nativeFunction.cast(),
@@ -149,6 +184,7 @@ class _AdapterBindingStubs {
   }
 
   void dispose() {
+    // Releases callables and static C strings allocated by this test stub.
     for (final ffi.NativeCallable<dynamic> callable in _callables) {
       callable.close();
     }
@@ -184,6 +220,21 @@ void main() {
     expect(handle.address, 91);
     expect(adapter.flutter_kiwi_ffi_close(handle), 0);
     expect(adapter.flutter_kiwi_ffi_add_user_word(handle, word, tag, 0.2), 0);
+    final ffi.Pointer<ffi.Int32> outTokenCount = malloc<ffi.Int32>(1);
+    addTearDown(() {
+      malloc.free(outTokenCount);
+    });
+    expect(
+      adapter.flutter_kiwi_ffi_analyze_token_count(
+        handle,
+        text,
+        1,
+        0,
+        outTokenCount,
+      ),
+      0,
+    );
+    expect(outTokenCount.value, 24);
     final ffi.Pointer<ffi.Char> json = adapter.flutter_kiwi_ffi_analyze_json(
       handle,
       text,

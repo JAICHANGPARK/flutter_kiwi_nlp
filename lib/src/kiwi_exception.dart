@@ -1,4 +1,4 @@
-/// Exception thrown by `flutter_kiwi_nlp`.
+/// Exception type used by `flutter_kiwi_nlp`.
 ///
 /// Check [message] for the user-facing error reason.
 class KiwiException implements Exception {

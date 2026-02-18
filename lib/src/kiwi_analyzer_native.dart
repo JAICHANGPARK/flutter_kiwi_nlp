@@ -16,6 +16,9 @@ import 'kiwi_model_assets.dart';
 import 'kiwi_options.dart';
 import 'kiwi_types.dart';
 
+/// Native FFI-backed Kiwi analyzer implementation.
+///
+/// Import this library through `flutter_kiwi_nlp.dart`.
 /// Native binding contract used by [KiwiAnalyzer].
 ///
 /// The default implementation delegates to generated FFI bindings. Tests may
@@ -37,6 +40,14 @@ abstract interface class KiwiNativeBindings {
     int matchOptions,
   );
 
+  int flutter_kiwi_ffi_analyze_token_count(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> text,
+    int topN,
+    int matchOptions,
+    Pointer<Int32> outTokenCount,
+  );
+
   int flutter_kiwi_ffi_add_user_word(
     Pointer<flutter_kiwi_ffi_handle_t> handle,
     Pointer<Char> word,
@@ -51,9 +62,11 @@ abstract interface class KiwiNativeBindings {
   Pointer<Char> flutter_kiwi_ffi_version();
 }
 
+/// Adapter that forwards calls to [FlutterKiwiFfiBindings].
 class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
   final FlutterKiwiFfiBindings _bindings;
 
+  /// Creates an adapter backed by generated FFI symbols.
   GeneratedKiwiNativeBindings(this._bindings);
 
   @override
@@ -88,6 +101,23 @@ class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
       text,
       topN,
       matchOptions,
+    );
+  }
+
+  @override
+  int flutter_kiwi_ffi_analyze_token_count(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> text,
+    int topN,
+    int matchOptions,
+    Pointer<Int32> outTokenCount,
+  ) {
+    return _bindings.flutter_kiwi_ffi_analyze_token_count(
+      handle,
+      text,
+      topN,
+      matchOptions,
+      outTokenCount,
     );
   }
 
@@ -360,6 +390,37 @@ class KiwiAnalyzer {
       }
     } finally {
       malloc.free(textPtr);
+    }
+  }
+
+  /// Analyzes [text] and returns the first-candidate token count.
+  ///
+  /// This avoids JSON materialization and is intended for performance
+  /// benchmarking of tokenizer throughput.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<int> analyzeTokenCount(
+    String text, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _assertOpen();
+    final Pointer<Utf8> textPtr = text.toNativeUtf8(allocator: malloc);
+    final Pointer<Int32> outTokenCount = malloc<Int32>(1);
+    try {
+      final int status = _bindings.flutter_kiwi_ffi_analyze_token_count(
+        _handle,
+        textPtr.cast(),
+        options.topN,
+        options.matchOptions,
+        outTokenCount,
+      );
+      if (status != 0) {
+        throw KiwiException(_readLastError(_bindings));
+      }
+      return outTokenCount.value;
+    } finally {
+      malloc.free(textPtr);
+      malloc.free(outTokenCount);
     }
   }
 

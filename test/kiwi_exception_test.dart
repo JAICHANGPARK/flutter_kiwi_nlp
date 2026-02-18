@@ -1,3 +1,4 @@
+// Verifies exception message preservation and string formatting behavior.
 import 'package:flutter_kiwi_nlp/src/kiwi_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
 

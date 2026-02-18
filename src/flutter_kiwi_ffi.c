@@ -541,6 +541,67 @@ FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json(
   return builder.data;
 }
 
+FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* text,
+    int32_t top_n,
+    int32_t match_options,
+    int32_t* out_token_count) {
+  wrapper_clear_error();
+  if (!handle || !handle->kiwi) {
+    wrapper_set_error("Invalid analyzer handle.");
+    return -1;
+  }
+  if (!text) {
+    wrapper_set_error("Text must not be null.");
+    return -1;
+  }
+  if (!out_token_count) {
+    wrapper_set_error("out_token_count must not be null.");
+    return -1;
+  }
+
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
+
+  kiwi_analyze_option_t options;
+  options.match_options = match_options == 0 ? handle->default_match_options : match_options;
+  options.blocklist = NULL;
+  options.open_ending = 0;
+  options.allowed_dialects = KIWI_DIALECT_ALL;
+  options.dialect_cost = 3.0f;
+
+  kiwi_res_h res =
+      g_kiwi_api.kiwi_analyze(handle->kiwi, text, top_n > 0 ? top_n : 1, options, NULL);
+  if (!res) {
+    wrapper_set_error_from_kiwi("Kiwi analyze failed.");
+    return -1;
+  }
+
+  int candidate_count = g_kiwi_api.kiwi_res_size(res);
+  if (candidate_count < 0) {
+    g_kiwi_api.kiwi_res_close(res);
+    wrapper_set_error_from_kiwi("Invalid Kiwi result set.");
+    return -1;
+  }
+  if (candidate_count == 0) {
+    *out_token_count = 0;
+    g_kiwi_api.kiwi_res_close(res);
+    return 0;
+  }
+
+  int token_count = g_kiwi_api.kiwi_res_word_num(res, 0);
+  g_kiwi_api.kiwi_res_close(res);
+  if (token_count < 0) {
+    wrapper_set_error_from_kiwi("Invalid Kiwi token count.");
+    return -1;
+  }
+
+  *out_token_count = token_count;
+  return 0;
+}
+
 FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_add_user_word(
     flutter_kiwi_ffi_handle_t* handle,
     const char* word,

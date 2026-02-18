@@ -1,3 +1,4 @@
+// Verifies unsupported-platform behavior of the stub analyzer backend.
 import 'package:flutter_kiwi_nlp/src/kiwi_analyzer_stub.dart';
 import 'package:flutter_kiwi_nlp/src/kiwi_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ void main() {
   const String unsupportedMessage =
       'flutter_kiwi_nlp native backend is not available on this platform yet.';
 
+  // Matches the exact unsupported-platform message emitted by the stub.
   Matcher hasUnsupportedMessage() {
     return isA<KiwiException>().having(
       (KiwiException error) => error.message,
@@ -33,6 +35,10 @@ void main() {
     expect(analyzer.nativeVersion, unsupportedMessage);
     await expectLater(
       analyzer.analyze('테스트'),
+      throwsA(hasUnsupportedMessage()),
+    );
+    await expectLater(
+      analyzer.analyzeTokenCount('테스트'),
       throwsA(hasUnsupportedMessage()),
     );
     await expectLater(

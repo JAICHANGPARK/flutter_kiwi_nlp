@@ -16,6 +16,8 @@
 \usepackage{caption}
 \usepackage{pgfplots}
 \usepackage[section]{placeins}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{arrows.meta,positioning,fit}
@@ -44,10 +46,12 @@
   keepspaces=true,
   showstringspaces=false
 }
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
 
 \title{\textbf{flutter\_kiwi\_nlp: A Native-First, Cross-Platform Korean NLP Plugin for Flutter}}
 \author{Jai-Chang Park\\Google Developer Expert (GDE), Dart \& Flutter}
-\date{February 17, 2026}
+\date{February 18, 2026}
 
 \begin{document}
 \maketitle
@@ -59,15 +63,21 @@ exposes one stable Dart API while internally operating two runtime stacks:
 Native (Dart FFI + C bridge + Kiwi shared library) and Web
 (Dart JS interop + kiwi-nlp WASM). This design enables a single application
 codebase across Android, iOS, macOS, Linux, Windows, and Web.
+Unlike ONNX-export deployment paths, this integration does not require adding
+an extra generic inference runtime layer because Kiwi already provides the
+analysis engine and model format used here.
 
 The implementation is explicitly aligned with on-device AI requirements:
 local inference execution, reduced text egress by default, predictable latency
 without per-request network dependence, and operational fallback controls for
 model provisioning. Empirically, repeated benchmark trials show that Flutter
 throughput is lower than the Python-native baseline in current measurements:
-approximately 0.71x on same-host desktop baseline, and as low as 0.60x in
+approximately 0.72x on same-host desktop baseline, and as low as 0.63x in
 mobile engineering-reference rows that compare emulator/simulator Flutter runs
-against host macOS Python. Cross-runtime linguistic agreement remains close on
+against host macOS Python. The updated benchmark pipeline also adds boundary-
+decomposed measurements (pure processing vs full JSON path), quantifying
+serialization/parsing overhead at 11--15\% of Flutter full-path elapsed time
+across measured environments. Cross-runtime linguistic agreement remains close on
 gold corpora
 (88.39\% vs 88.58\% token agreement; 84.90\% vs 85.55\% POS agreement).
 On native targets, inference can run fully offline after one-time model
@@ -348,10 +358,11 @@ represent rule/lexicon-derived feature contributions.
 State progression and pruning can be abstracted as:
 \[
 h_t=F(h_{t-1},e_t),\qquad
-\mathcal{B}_t=\mathrm{TopK}\!\left(\mathcal{P}_t(G),K,S\right),
+\mathcal{B}_t=\mathrm{TopK}\!\left(\mathcal{P}_t(G),K_{\mathrm{beam}},S\right),
 \]
 where \(\mathcal{P}_t(G)\) is the partial-path set at depth \(t\), and
-\(\mathcal{B}_t\) is the retained beam-like frontier.
+\(\mathcal{B}_t\) is the retained beam-like frontier with width
+\(K_{\mathrm{beam}}\).
 
 The LM-family switch exposed by Kiwi model type can be written as:
 \[
@@ -375,12 +386,13 @@ forms for reviewer intuition:
 \[
 \Delta_{\mathrm{sbg}}(e_t,h_{t-1})
 \approx
-\sum_{k=1}^{\min(K,t-1)}\alpha_k\,
+\sum_{k=1}^{\min(K_{\mathrm{skip}},t-1)}\alpha_k\,
 \psi_k\!\left(m_t,m_{t-k}\right),
 \]
 where \(m_t\) is the morpheme realized by edge \(e_t\), \(k\) is skip distance,
 and \(\alpha_k\) is a distance-dependent weight.
 The function \(\psi_k\) denotes skip-bigram interaction score components.
+Here \(K_{\mathrm{skip}}\) is the maximum skip order considered.
 
 A generic contextual n-gram embedding style score can be expressed as:
 \[
@@ -402,6 +414,8 @@ with \(n_g > n\) to reflect wider context coverage.
 These equations are intentionally presented as conceptual abstractions to
 explain model-family behavior at paper level; exact implementation constants and
 feature composition are defined by upstream Kiwi internals and model artifacts.
+They are explanatory model-family formulations and are not used directly to
+compute the benchmark tables in Section~\ref{tab:benchmark}.
 
 Figure~\ref{fig:kiwi-internal-architecture} summarizes this upstream-oriented
 view of Kiwi internals as used in the plugin context.
@@ -487,6 +501,26 @@ This distinction explains why Kiwi integration characteristics differ from
 Transformer runtimes: lower footprint and predictable CPU inference behavior are
 prioritized, while broad semantic representation power is not the primary design
 target in this component.
+
+\subsubsection{Why No ONNX Runtime Layer Is Required}
+Some modern NLP deployment stacks package neural models in ONNX format and
+ship an additional generic runtime engine (for example, ONNX Runtime) inside
+the application process. \texttt{flutter\_kiwi\_nlp} intentionally does not
+add that extra layer, because Kiwi already provides its own inference/decode
+engine and model format for Korean morphological analysis.
+
+This design choice has practical implications:
+\begin{itemize}[leftmargin=1.5em]
+  \item fewer runtime components to integrate and version-lock,
+  \item simpler build/runtime dependency surface for plugin consumers,
+  \item no separate ONNX operator/runtime compatibility matrix to maintain.
+\end{itemize}
+
+Important scope clarification: this is a dependency and integration argument,
+not a universal speed claim against all ONNX-based analyzers. In this paper's
+own benchmark, \texttt{flutter\_kiwi\_nlp} still trails Python-native
+\texttt{kiwipiepy} throughput due to bridge overhead, even though the backend
+engine itself is Kiwi in both cases.
 
 \subsection{Why This Integration Is Non-Trivial}
 The plugin is not a direct wrapper around one runtime. It is an orchestration
@@ -722,6 +756,63 @@ Fuchsia & Not declared & Stub behavior & N/A & N/A \\
   \item Windows arch normalization supports \texttt{x64} (\texttt{x86\_64}),
   \texttt{Win32} (\texttt{x86}), and \texttt{arm64}; prebuilt download path
   currently covers \texttt{x64}/\texttt{Win32}.
+\end{itemize}
+
+\subsection{Artifact Footprint Snapshot}
+Table~\ref{tab:artifact-footprint} summarizes build/model size signals that are
+already tracked in project documentation and re-checked from workspace artifacts
+for this revision. These are engineering reference numbers, not final
+store-delivery APK/IPA install sizes.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Artifact footprint snapshot (workspace measurement, 2026-02-18)}
+\label{tab:artifact-footprint}
+\begin{tabularx}{\linewidth}{@{}L{0.42\linewidth}L{0.17\linewidth}L{0.35\linewidth}@{}}
+\toprule
+Artifact & Size (approx.) & Notes \\
+\midrule
+Default model directory (\path{assets/kiwi-models/cong/base}) & 99,308,057 bytes (\(\approx\)94.71MiB) & Uncompressed model files used by the plugin. \\
+Same default model compressed as local \texttt{.tgz} archive & 79,494,329 bytes (\(\approx\)75.8MiB) & Local compression reference from this workspace. \\
+\path{android/src/main/jniLibs/arm64-v8a/libkiwi.so} & 166,229,088 bytes (\(\approx\)158.53MiB) & Current artifact is \texttt{with debug\_info}, \texttt{not stripped}. \\
+\path{android/src/main/jniLibs/x86\_64/libkiwi.so} & 200,071,656 bytes (\(\approx\)190.80MiB) & Current artifact is \texttt{with debug\_info}, \texttt{not stripped}. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+To avoid ambiguity between source artifacts and packaged binaries,
+Table~\ref{tab:artifact-footprint-apk} reports example Android app outputs for
+both debug and release builds in the same workspace snapshot.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Example Android package footprint (debug vs release, 2026-02-18)}
+\label{tab:artifact-footprint-apk}
+\begin{tabularx}{\linewidth}{@{}L{0.42\linewidth}L{0.17\linewidth}L{0.35\linewidth}@{}}
+\toprule
+Packaged item & Size & Notes \\
+\midrule
+\path{example/build/app/outputs/flutter-apk/app-debug.apk} & 178,454,872 bytes (\(\approx\)170.19MiB) & Example app debug APK. \\
+\path{example/build/app/outputs/flutter-apk/app-release.apk} & 113,030,559 bytes (\(\approx\)107.80MiB) & Example app release APK. \\
+Release APK entry \path{lib/arm64-v8a/libkiwi.so} & 7,613,192 bytes & Stripped native library entry inside APK. \\
+Release APK entry \path{lib/x86_64/libkiwi.so} & 11,381,344 bytes & Stripped native library entry inside APK. \\
+Release APK model entries \path{assets/.../kiwi-models/cong/base/*} & 79,574,759 bytes compressed & Same files are 99,308,057 bytes uncompressed. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Interpretation notes:
+\begin{itemize}[leftmargin=1.5em]
+  \item Compressed and uncompressed measurements are not directly comparable.
+  \item Source-tree native binaries and packaged APK entries represent different
+  pipeline stages.
+  \item Android packaging strips debug symbols from native libraries in this
+  build flow, which dominates the source-vs-packaged size gap.
+  \item ABI-specific native binaries should be interpreted per target split.
+  \item Final store-delivery size can further differ by app-bundle splitting and
+  distribution-side compression.
 \end{itemize}
 
 \section{Public API Specification}
@@ -1336,8 +1427,8 @@ Item & Value \\
 Item & Value \\
 \midrule
 \endhead
-Report snapshot date & February 17, 2026 \\
-Repository commit & \texttt{f38f79efabcdfca7ab5c54770e79266066c9a6b1} \\
+Report snapshot date & February 18, 2026 \\
+Repository commit base & \texttt{0afe90607b9e35758b2836bf36b4fb6aea4af281} \\
 Flutter SDK & \texttt{3.41.1} (framework revision \texttt{582a0e7c55}) \\
 Dart SDK & \texttt{3.11.0} \\
 Python runtime & \texttt{3.14.3} \\
@@ -1348,22 +1439,27 @@ Host CPU & \texttt{Apple M2 Pro}, 10 logical cores \\
 Host memory & 16 GiB (\texttt{17179869184} bytes) \\
 Corpus hash (SHA-256) & \path{0fed28f4601cd577de8ad0f35fbe5bb1827e71931d3c8b19714a9976a12f3c9f} \\
 Desktop benchmark shape & \texttt{trials=5, warmup\_runs=3, measure\_runs=15, top\_n=1} \\
+Desktop analyze impl & Flutter: \texttt{token\_count} (primary), Kiwi: \texttt{analyze} \\
 \bottomrule
 \end{longtable}
 
 \subsection{Recorded Configuration and Workload}
-From the benchmark trial sets included in this report (February 17, 2026):
+From the benchmark trial sets included in this report (February 18, 2026):
 \begin{itemize}[leftmargin=1.5em]
   \item Desktop reference platform: macOS 15.7.4 arm64
   (release, \texttt{n=5}, \texttt{warmup=3}, \texttt{measure=15}).
   \item Mobile platform A: iOS 26.2 simulator (iPhone 17, debug,
-  \texttt{n=10}, \texttt{warmup=5}, \texttt{measure=30}).
+  \texttt{n=5}, \texttt{warmup=3}, \texttt{measure=15}).
   \item Mobile platform B: Android 16 emulator (API 36, release,
-  \texttt{n=10}, \texttt{warmup=5}, \texttt{measure=30}).
+  \texttt{n=5}, \texttt{warmup=3}, \texttt{measure=15}).
   \item Corpus sentences: 40.
+  \item Sample POS rows emitted per runtime: \texttt{sample\_count = 10}.
   \item Total measured analyses per trial:
-  desktop \texttt{15 * 40 = 600}; iOS/Android \texttt{30 * 40 = 1200}.
+  desktop/iOS/Android all use \texttt{15 * 40 = 600}.
   \item \texttt{top\_n}: 1.
+  \item Desktop primary analyze path:
+  Flutter \texttt{token\_count}, Kiwi \texttt{analyze}
+  (API path differs; see artifact caution note).
   \item Build options: \texttt{1039}
   (\texttt{integrateAllomorph}, \texttt{loadDefaultDict},
   \texttt{loadTypoDict}, \texttt{loadMultiDict}, \texttt{modelTypeCong}).
@@ -1375,9 +1471,9 @@ From the benchmark trial sets included in this report (February 17, 2026):
   iOS measurements were collected in \texttt{debug} mode.
   \item For mobile runs, \texttt{kiwipiepy} comparison values were collected on
   the host macOS runtime using the same corpus and benchmark loop settings.
-  \item iOS/Android rows were rerun with expanded trial/loop budget
-  (\texttt{n=10}, \texttt{warmup=5}, \texttt{measure=30}) to reduce
-  single-run noise.
+  \item This revision introduces explicit layered timing decomposition
+  (\texttt{pure\_elapsed\_ms}, \texttt{full\_elapsed\_ms},
+  \texttt{json\_overhead\_ms}) in addition to warm/cold summaries.
 \end{itemize}
 
 \subsection{Mobile Test Environment Details}
@@ -1408,6 +1504,16 @@ and AVD \texttt{config.ini} inspection.
 
 \subsection{Metric Definitions}
 Both benchmark programs produce comparable derived metrics:
+\textbf{Cold start} in this paper means one-time analyzer initialization from a
+not-ready state (library/model load and analyzer construction).
+\textbf{Warm path} means steady-state \texttt{analyze()} execution after
+initialization has already completed.
+
+These are reported separately because they answer different operational
+questions: cold start dominates short sessions and first-use latency, while warm
+path dominates sustained throughput/latency under repeated analysis calls.
+\texttt{Session-length effective throughput} then combines both to show
+end-to-end impact for finite request counts.
 \begin{itemize}[leftmargin=1.5em]
   \item warm metrics use only measured loop time (\texttt{elapsed\_ms}) after
   warmup; cold init is excluded from throughput/latency rows.
@@ -1434,20 +1540,56 @@ Using notation aligned with benchmark payload fields:
 S=\frac{\texttt{elapsed\_ms}}{1000},\quad
 A=\texttt{total\_analyses},\quad
 C=\texttt{total\_chars},\quad
-K=\texttt{total\_tokens}.
+U=\texttt{total\_tokens}.
 \]
 \[
 T_{\mathrm{analyses}}=\frac{A}{S},\quad
 T_{\mathrm{chars}}=\frac{C}{S},\quad
-T_{\mathrm{tokens}}=\frac{K}{S}.
+T_{\mathrm{tokens}}=\frac{U}{S}.
 \]
 \[
 L_{\mathrm{avg-ms}}=\frac{\texttt{elapsed\_ms}}{A},\quad
-L_{\mathrm{token-us}}=\frac{1000\cdot\texttt{elapsed\_ms}}{K}.
+L_{\mathrm{token-us}}=\frac{1000\cdot\texttt{elapsed\_ms}}{U}.
 \]
 \[
 T_{\mathrm{eff}}(N)=\frac{N}{(\texttt{init\_ms}/1000)+(N/T_{\mathrm{analyses}})}.
 \]
+
+\subsection{Boundary-Decomposed Measurement (Pure vs Full Path)}
+To make performance interpretation more granular, the updated benchmark captures
+both:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Pure path}: analyzer compute path using
+  \texttt{token\_count}-based timing.
+  \item \textbf{Full path}: full JSON analyze payload path
+  (\texttt{json} path) including bridge serialization/parsing overhead.
+\end{itemize}
+
+Let \(E_{\mathrm{pure}}\) and \(E_{\mathrm{full}}\) denote elapsed times for
+pure/full paths on the same trial workload. Then:
+\[
+\mathrm{BoundaryLoss} = 1-\frac{E_{\mathrm{pure}}}{E_{\mathrm{full}}}
+=1-\frac{T_{\mathrm{full}}}{T_{\mathrm{pure}}}.
+\]
+
+\begingroup
+\footnotesize
+\begin{longtable}{@{}L{0.27\linewidth}L{0.17\linewidth}L{0.17\linewidth}L{0.11\linewidth}L{0.16\linewidth}L{0.10\linewidth}@{}}
+\caption{Layered boundary decomposition summary (mean ± stddev)}\label{tab:benchmark-boundary}\\
+\toprule
+Environment & Pure aps & Full aps & Loss & Overhead/analysis (ms) & Overhead ratio \\
+\midrule
+\endfirsthead
+\toprule
+Environment & Pure aps & Full aps & Loss & Overhead/analysis (ms) & Overhead ratio \\
+\midrule
+\endhead
+macOS desktop baseline & 2546.24 ± 179.08 & 2260.25 ± 193.49 & 11.23\% & 0.0509 ± 0.0130 & 11.31 ± 1.69\% \\
+iOS simulator (debug) & 2422.31 ± 190.28 & 2105.67 ± 93.14 & 13.07\% & 0.0609 ± 0.0202 & 12.84 ± 4.46\% \\
+Android emulator (release) & 2214.79 ± 301.30 & 1877.74 ± 458.67 & 15.22\% & 0.1002 ± 0.1321 & 14.81 ± 18.16\% \\
+\bottomrule
+\end{longtable}
+\endgroup
 
 \subsection{Recorded Result Summary: Desktop Baseline (macOS, n=5)}
 \begin{longtable}{@{}L{0.34\linewidth}L{0.20\linewidth}L{0.20\linewidth}L{0.18\linewidth}@{}}
@@ -1460,11 +1602,11 @@ Metric & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 Metric & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 \midrule
 \endhead
-Throughput (analyses/s) & 2409.52 ± 135.38 & 3370.35 ± 69.78 & 0.71x \\
-Throughput (chars/s) & 81682.66 ± 4589.43 & 114254.92 ± 2365.38 & 0.71x \\
-Throughput (tokens/s) & 38793.24 ± 2179.64 & 54178.40 ± 1121.64 & 0.72x \\
-Avg latency (ms, lower better) & 0.42 ± 0.02 & 0.30 ± 0.01 & 1.40x slower \\
-Avg token latency (us/token, lower better) & 25.84 ± 1.48 & 18.46 ± 0.38 & 1.40x slower \\
+Throughput (analyses/s) & 2546.24 ± 179.08 & 3532.24 ± 167.92 & 0.72x \\
+Throughput (chars/s) & 86317.60 ± 6070.90 & 119743.02 ± 5692.35 & 0.72x \\
+Throughput (tokens/s) & 40994.49 ± 2883.23 & 56780.80 ± 2699.25 & 0.72x \\
+Avg latency (ms, lower better) & 0.39 ± 0.03 & 0.28 ± 0.01 & 1.39x slower \\
+Avg token latency (us/token, lower better) & 24.50 ± 1.89 & 17.64 ± 0.84 & 1.39x slower \\
 \bottomrule
 \end{longtable}
 
@@ -1475,6 +1617,10 @@ adds 95\% confidence intervals for desktop baseline means
 \[
 \mathrm{CI}_{95}(\mu)=\bar{x}\pm t_{0.975,\;n-1}\cdot\frac{s}{\sqrt{n}}.
 \]
+Here \(s\) denotes the sample standard deviation across trials and
+\(t_{0.975,\;n-1}\) is the Student-\(t\) quantile for two-sided 95\% intervals.
+This interval assumes independent repeated trials under the same benchmark
+configuration.
 
 \begin{longtable}{@{}L{0.32\linewidth}L{0.29\linewidth}L{0.29\linewidth}@{}}
 \caption{Desktop baseline 95\% confidence intervals}\label{tab:benchmark-ci}\\
@@ -1486,11 +1632,11 @@ Metric & flutter\_kiwi\_nlp (95\% CI) & kiwipiepy (95\% CI) \\
 Metric & flutter\_kiwi\_nlp (95\% CI) & kiwipiepy (95\% CI) \\
 \midrule
 \endhead
-Throughput (analyses/s) & [2241.42, 2577.62] & [3283.71, 3456.99] \\
-Throughput (chars/s) & [75984.13, 87381.19] & [111317.91, 117191.93] \\
-Throughput (tokens/s) & [36086.86, 41499.62] & [52785.70, 55571.10] \\
-Avg latency (ms) & [0.395, 0.445] & [0.288, 0.312] \\
-Avg token latency (us/token) & [24.00, 27.68] & [17.99, 18.93] \\
+Throughput (analyses/s) & [2323.88, 2768.60] & [3323.75, 3740.74] \\
+Throughput (chars/s) & [78779.58, 93855.62] & [112675.04, 126811.01] \\
+Throughput (tokens/s) & [37414.49, 44574.50] & [53429.24, 60132.36] \\
+Avg latency (ms) & [0.357, 0.432] & [0.267, 0.300] \\
+Avg token latency (us/token) & [22.16, 26.84] & [16.60, 18.69] \\
 \bottomrule
 \end{longtable}
 
@@ -1505,13 +1651,13 @@ Environment & flutter\_kiwi\_nlp init (ms) & kiwipiepy init (ms) & Ratio (median
 Environment & flutter\_kiwi\_nlp init (ms) & kiwipiepy init (ms) & Ratio (median) \\
 \midrule
 \endhead
-macOS desktop baseline & median 1367.82, p95 1419.09 & median 670.98, p95 801.21 & 2.04x slower \\
-iOS simulator (debug) & median 1439.55, p95 1660.40 & median 749.96, p95 931.24 & 1.92x slower \\
-Android emulator (release) & median 4093.05, p95 5573.90 & median 1098.48, p95 1307.90 & 3.73x slower \\
+macOS desktop baseline & median 1387.41, p95 1420.06 & median 976.95, p95 1104.95 & 1.42x slower \\
+iOS simulator (debug) & median 1358.27, p95 1496.69 & median 677.10, p95 711.15 & 2.01x slower \\
+Android emulator (release) & median 3268.46, p95 4028.02 & median 847.02, p95 1053.33 & 3.86x slower \\
 \bottomrule
 \end{longtable}
 
-\subsection{Additional Mobile Runtime Measurements (iOS n=10, Android n=10)}
+\subsection{Additional Mobile Runtime Measurements (iOS n=5, Android n=5)}
 \subsubsection{iOS Simulator (debug)}
 \begin{longtable}{@{}L{0.34\linewidth}L{0.20\linewidth}L{0.20\linewidth}L{0.18\linewidth}@{}}
 \caption{iOS simulator warm-path summary (mean ± stddev)}\label{tab:benchmark-ios}\\
@@ -1523,11 +1669,11 @@ Metric & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 Metric & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 \midrule
 \endhead
-Throughput (analyses/s) & 2065.58 ± 243.45 & 3423.38 ± 181.54 & 0.60x \\
-Throughput (chars/s) & 70023.12 ± 8253.07 & 116052.70 ± 6154.21 & 0.60x \\
-Throughput (tokens/s) & 33255.82 ± 3919.60 & 55030.89 ± 2918.26 & 0.60x \\
-Avg latency (ms, lower better) & 0.49 ± 0.06 & 0.29 ± 0.02 & 1.67x slower \\
-Avg token latency (us/token, lower better) & 30.45 ± 3.65 & 18.22 ± 1.01 & 1.67x slower \\
+Throughput (analyses/s) & 2422.31 ± 190.28 & 3352.24 ± 192.79 & 0.72x \\
+Throughput (chars/s) & 82116.41 ± 6450.47 & 113640.90 ± 6535.66 & 0.72x \\
+Throughput (tokens/s) & 38999.24 ± 3063.50 & 53887.24 ± 3099.14 & 0.72x \\
+Avg latency (ms, lower better) & 0.41 ± 0.03 & 0.30 ± 0.02 & 1.39x slower \\
+Avg token latency (us/token, lower better) & 25.76 ± 1.96 & 18.61 ± 1.11 & 1.38x slower \\
 \bottomrule
 \end{longtable}
 
@@ -1542,11 +1688,11 @@ Metric & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 Metric & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 \midrule
 \endhead
-Throughput (analyses/s) & 1981.83 ± 250.89 & 3222.94 ± 415.19 & 0.61x \\
-Throughput (chars/s) & 67183.98 ± 8505.33 & 109257.81 ± 14074.97 & 0.61x \\
-Throughput (tokens/s) & 31907.43 ± 4039.41 & 51808.83 ± 6674.19 & 0.62x \\
-Avg latency (ms, lower better) & 0.51 ± 0.08 & 0.32 ± 0.05 & 1.63x slower \\
-Avg token latency (us/token, lower better) & 31.88 ± 4.84 & 19.64 ± 2.97 & 1.62x slower \\
+Throughput (analyses/s) & 2214.79 ± 301.30 & 3510.74 ± 86.29 & 0.63x \\
+Throughput (chars/s) & 75081.44 ± 10213.94 & 119014.22 ± 2925.10 & 0.63x \\
+Throughput (tokens/s) & 35658.15 ± 4850.87 & 56435.21 ± 1387.05 & 0.63x \\
+Avg latency (ms, lower better) & 0.46 ± 0.07 & 0.28 ± 0.01 & 1.61x slower \\
+Avg token latency (us/token, lower better) & 28.52 ± 4.41 & 17.73 ± 0.44 & 1.61x slower \\
 \bottomrule
 \end{longtable}
 
@@ -1565,18 +1711,18 @@ Environment & N & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 Environment & N & flutter\_kiwi\_nlp & kiwipiepy & Ratio (Flutter/Kiwi) \\
 \midrule
 \endhead
-macOS desktop baseline & 1 & 0.74 ± 0.04 & 1.43 ± 0.13 & 0.52x \\
-macOS desktop baseline & 10 & 7.39 ± 0.37 & 14.26 ± 1.28 & 0.52x \\
-macOS desktop baseline & 100 & 71.93 ± 3.55 & 137.37 ± 11.94 & 0.52x \\
-macOS desktop baseline & 1000 & 566.75 ± 26.54 & 1003.73 ± 66.39 & 0.56x \\
-iOS simulator (debug) & 1 & 0.69 ± 0.06 & 1.34 ± 0.18 & 0.52x \\
-iOS simulator (debug) & 10 & 6.89 ± 0.61 & 13.31 ± 1.84 & 0.52x \\
-iOS simulator (debug) & 100 & 66.88 ± 5.89 & 128.55 ± 17.19 & 0.52x \\
-iOS simulator (debug) & 1000 & 516.79 ± 43.34 & 957.88 ± 100.17 & 0.54x \\
-Android emulator (release) & 1 & 0.24 ± 0.04 & 0.93 ± 0.12 & 0.26x \\
-Android emulator (release) & 10 & 2.42 ± 0.43 & 9.28 ± 1.21 & 0.26x \\
-Android emulator (release) & 100 & 23.92 ± 4.18 & 90.31 ± 11.42 & 0.26x \\
-Android emulator (release) & 1000 & 215.45 ± 35.75 & 716.48 ± 69.80 & 0.30x \\
+macOS desktop baseline & 1 & 0.72 ± 0.01 & 1.06 ± 0.16 & 0.68x \\
+macOS desktop baseline & 10 & 7.16 ± 0.12 & 10.60 ± 1.57 & 0.68x \\
+macOS desktop baseline & 100 & 69.84 ± 1.24 & 103.15 ± 14.81 & 0.68x \\
+macOS desktop baseline & 1000 & 559.86 ± 15.62 & 813.32 ± 86.53 & 0.69x \\
+iOS simulator (debug) & 1 & 0.72 ± 0.04 & 1.48 ± 0.06 & 0.49x \\
+iOS simulator (debug) & 10 & 7.21 ± 0.42 & 14.72 ± 0.59 & 0.49x \\
+iOS simulator (debug) & 100 & 70.17 ± 4.04 & 141.59 ± 5.39 & 0.50x \\
+iOS simulator (debug) & 1000 & 556.34 ± 32.34 & 1025.03 ± 30.53 & 0.54x \\
+Android emulator (release) & 1 & 0.30 ± 0.05 & 1.16 ± 0.18 & 0.26x \\
+Android emulator (release) & 10 & 3.04 ± 0.46 & 11.53 ± 1.82 & 0.26x \\
+Android emulator (release) & 100 & 30.01 ± 4.50 & 111.90 ± 17.23 & 0.27x \\
+Android emulator (release) & 1000 & 267.39 ± 39.28 & 866.99 ± 106.91 & 0.31x \\
 \bottomrule
 \end{longtable}
 
@@ -1609,9 +1755,9 @@ use Kiwi mean as baseline index 100.
   y dir=both,
   y explicit
 ] coordinates {
-  (Analyses/s,71.49) +- (0,4.02)
-  (Chars/s,71.49) +- (0,4.02)
-  (Tokens/s,71.60) +- (0,4.02)
+  (Analyses/s,72.09) +- (0,5.07)
+  (Chars/s,72.09) +- (0,5.07)
+  (Tokens/s,72.20) +- (0,5.08)
 };
 \addplot+[
   fill=orange!60,
@@ -1620,9 +1766,9 @@ use Kiwi mean as baseline index 100.
   y dir=both,
   y explicit
 ] coordinates {
-  (Analyses/s,100.00) +- (0,2.07)
-  (Chars/s,100.00) +- (0,2.07)
-  (Tokens/s,100.00) +- (0,2.07)
+  (Analyses/s,100.00) +- (0,4.75)
+  (Chars/s,100.00) +- (0,4.75)
+  (Tokens/s,100.00) +- (0,4.75)
 };
 \legend{flutter\_kiwi\_nlp,kiwipiepy}
 \end{axis}
@@ -1656,9 +1802,9 @@ use Kiwi mean as baseline index 100.
   y dir=both,
   y explicit
 ] coordinates {
-  (Init(ms),192.15) +- (0,9.36)
-  (AvgLatency(ms),140.00) +- (0,6.67)
-  (TokenLatency(us/token),139.98) +- (0,8.02)
+  (Init(ms),145.53) +- (0,2.39)
+  (AvgLatency(ms),139.08) +- (0,10.72)
+  (TokenLatency(us/token),138.86) +- (0,10.70)
 };
 \addplot+[
   fill=orange!60,
@@ -1667,9 +1813,9 @@ use Kiwi mean as baseline index 100.
   y dir=both,
   y explicit
 ] coordinates {
-  (Init(ms),100.00) +- (0,10.21)
-  (AvgLatency(ms),100.00) +- (0,3.33)
-  (TokenLatency(us/token),100.00) +- (0,2.06)
+  (Init(ms),100.00) +- (0,14.65)
+  (AvgLatency(ms),100.00) +- (0,4.76)
+  (TokenLatency(us/token),100.00) +- (0,4.76)
 };
 \legend{flutter\_kiwi\_nlp,kiwipiepy}
 \end{axis}
@@ -1687,11 +1833,11 @@ use Kiwi mean as baseline index 100.
 \toprule
 Trial & Flutter init (ms) & Kiwi init (ms) & Flutter analyses/s & Kiwi analyses/s \\
 \midrule
-1 & 1324.26 & 831.03 & 2529.03 & 3375.78 \\
-2 & 1428.26 & 670.98 & 2453.40 & 3323.00 \\
-3 & 1382.42 & 661.76 & 2227.94 & 3484.31 \\
-4 & 1367.82 & 681.92 & 2309.14 & 3362.80 \\
-5 & 1254.09 & 670.75 & 2528.08 & 3305.87 \\
+1 & 1423.93 & 810.77 & 2231.43 & 3316.65 \\
+2 & 1387.41 & 1067.51 & 2615.10 & 3487.51 \\
+3 & 1362.52 & 1114.31 & 2680.97 & 3669.04 \\
+4 & 1404.55 & 815.85 & 2608.83 & 3456.25 \\
+5 & 1385.88 & 976.95 & 2594.89 & 3731.77 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1715,22 +1861,22 @@ Trial & Flutter init (ms) & Kiwi init (ms) & Flutter analyses/s & Kiwi analyses/
   mark=*,
   line width=1pt
 ] coordinates {
-  (1,2529.03)
-  (2,2453.40)
-  (3,2227.94)
-  (4,2309.14)
-  (5,2528.08)
+  (1,2231.43)
+  (2,2615.10)
+  (3,2680.97)
+  (4,2608.83)
+  (5,2594.89)
 };
 \addplot+[
   color=orange!80!black,
   mark=square*,
   line width=1pt
 ] coordinates {
-  (1,3375.78)
-  (2,3323.00)
-  (3,3484.31)
-  (4,3362.80)
-  (5,3305.87)
+  (1,3316.65)
+  (2,3487.51)
+  (3,3669.04)
+  (4,3456.25)
+  (5,3731.77)
 };
 \legend{flutter\_kiwi\_nlp,kiwipiepy}
 \end{axis}
@@ -1744,11 +1890,27 @@ Trial & Flutter init (ms) & Kiwi init (ms) & Flutter analyses/s & Kiwi analyses/
 \subsection{Detailed Interpretation (Honest Reading)}
 Across desktop and mobile trial sets, warm-path throughput and latency are
 consistently stable, and warm per-call latency remains sub-millisecond in these
-configurations (roughly 0.4--0.6 ms). This matches the practical impression
+configurations (roughly 0.3--0.6 ms). This matches the practical impression
 that repeated in-app analysis is responsive after initialization. At the same
 time, repeated measurements still show slower init and lower throughput on the
 Flutter path relative to the Python reference runtime, with magnitude varying
 by environment (desktop native, iOS simulator debug, Android emulator release).
+Compared with the previous mobile rows in this report, the updated run profile
+shows improved Flutter warm throughput on both mobile targets
+(iOS: \(2065.58 \rightarrow 2422.31\) analyses/s, +17.27\%;
+Android: \(1981.83 \rightarrow 2214.79\) analyses/s, +11.75\%),
+while desktop warm throughput moved slightly downward
+(\(2659.19 \rightarrow 2546.24\) analyses/s, -4.25\%).
+The revised methodology therefore surfaces a more nuanced trend:
+mobile warm-path behavior improved under the updated setup, but cross-runtime
+gaps still remain.
+
+New boundary-decomposed instrumentation (Table~\ref{tab:benchmark-boundary})
+adds direct evidence for where overhead accumulates. Flutter boundary loss
+(full JSON path vs pure processing path) is 11.23\% on desktop, 13.07\% on iOS
+simulator, and 15.22\% on Android emulator, with per-analysis overhead of
+roughly 0.05--0.10 ms.
+
 Based on code inspection and payload values, the most likely contributors are:
 \begin{enumerate}[leftmargin=1.5em]
   \item \textbf{Boundary conversion overhead (evidence-based):}
@@ -1784,7 +1946,7 @@ Based on code inspection and payload values, the most likely contributors are:
 Current benchmark limitations that should be stated explicitly:
 \begin{itemize}[leftmargin=1.5em]
   \item Trial counts are improved but still modest for strong inference
-  (desktop \texttt{n=5}, iOS/Android \texttt{n=10}).
+  (desktop/iOS/Android all \texttt{n=5}).
   \item No explicit CPU pinning or thermal-state control.
   \item Bitmask parity is enforced, but internal backend semantics can still differ.
   \item Init metric combines multiple concerns (library load, model resolution,
@@ -1832,6 +1994,10 @@ Metrics are sequence-level agreements based on normalized Levenshtein distance:
 token agreement compares \texttt{form} sequences, POS agreement compares
 \texttt{form/tag} sequences, and sentence exact match requires full sequence
 identity.
+Let \(M\) be the number of evaluated sentences. For sentence \(i\),
+\(g_i^{\mathrm{form}}\) and \(p_i^{\mathrm{form}}\) are gold/predicted token-form
+sequences, and \(g_i^{\mathrm{pair}}\), \(p_i^{\mathrm{pair}}\) are gold/predicted
+\texttt{form/tag} pair sequences.
 \[
 A_{\mathrm{token}}
 =1-\frac{
@@ -2074,9 +2240,21 @@ These hooks allow deterministic tests for initialization and fallback branches.
 
 \section{Testing and Coverage Quality}
 \subsection{Test Suite Scope}
-The current repository test suite contains 49 unit tests organized across
-14 groups in 9 test files. Coverage focus is strongest on API contract behavior,
+As of February 18, 2026, the test suite is organized in layered form:
+\begin{itemize}[leftmargin=1.5em]
+  \item Core package layer (\path{test/}): 51 unit tests in 14 groups across
+  9 files.
+  \item Example widget/golden layer (\path{example/test/}): 5 tests, including
+  3 screenshot(golden) assertions.
+  \item Example integration/acceptance layer
+  (\path{example/integration\_test/}): 3 end-to-end tests.
+\end{itemize}
+
+This yields 59 test declarations across repository test directories. Coverage
+focus in the core package layer remains strongest on API contract behavior,
 typed model parsing, option flags, error semantics, and native fallback logic.
+For macOS desktop execution, the three integration tests pass under serial
+invocation with explicit device pinning (\texttt{-d macos}).
 
 Key tested areas include:
 \begin{itemize}[leftmargin=1.5em]
@@ -2086,14 +2264,22 @@ Key tested areas include:
   \item model path resolution and asset/archive fallback branches,
   \item JSON model decoding for \texttt{KiwiToken}, \texttt{KiwiCandidate},
   and \texttt{KiwiAnalyzeResult},
-  \item option constant composition and exception formatting.
+  \item option constant composition and exception formatting,
+  \item acceptance flow over analyzer demo UI actions
+  (analyze/clear/settings/POS-sheet),
+  \item runtime smoke checks for \texttt{create} $\rightarrow$
+  \texttt{analyze} $\rightarrow$ \texttt{close},
+  \item native runtime-path probing on macOS FFI candidate resolution,
+  \item screenshot(golden) stability checks for settings and POS dictionary
+  sheets under a fixed mobile viewport.
 \end{itemize}
 
 \subsection{Coverage Snapshot}
-Using \texttt{flutter test --coverage test} on February 17, 2026:
+Using \texttt{flutter test --coverage test} on February 18, 2026
+(core package layer only):
 \begin{itemize}[leftmargin=1.5em]
-  \item Raw line coverage: 324/345 = 93.91\%.
-  \item Filtered line coverage: 79/79 = 100.00\%.
+  \item Raw line coverage: 350/374 = 93.58\%.
+  \item Filtered line coverage: 81/81 = 100.00\%.
 \end{itemize}
 
 \begin{figure}[htbp]
@@ -2114,7 +2300,7 @@ Using \texttt{flutter test --coverage test} on February 17, 2026:
   nodes near coords align={vertical}
 ]
 \addplot+[fill=teal!60, draw=teal!80!black] coordinates {
-  (Raw,93.91)
+  (Raw,93.58)
   (Filtered,100.00)
 };
 \end{axis}
@@ -2144,12 +2330,14 @@ must not be interpreted as full end-to-end runtime coverage.
 
 \subsection{Honest Quality Assessment}
 The present quality state is strong for deterministic unit-level contract tests
-and pure-Dart utility/model layers. Remaining risk concentrates in integration
-boundaries:
+and now includes initial acceptance/golden coverage in the example app.
+Remaining risk still concentrates in integration boundaries:
 \begin{itemize}[leftmargin=1.5em]
   \item native dynamic loading and ABI interaction across target platforms,
   \item web module import/WASM loading under browser/network constraints,
-  \item platform build-hook behavior in real CI/device matrices.
+  \item platform build-hook behavior in real CI/device matrices,
+  \item physical mobile device variability beyond simulator/emulator
+  environments.
 \end{itemize}
 
 Therefore, line coverage should be treated as one quality indicator, not a
@@ -2159,39 +2347,72 @@ next quality multiplier for this plugin class.
 \section{Limitations and Future Work}
 \subsection{Current Limitations}
 \begin{itemize}[leftmargin=1.5em]
-  \item Web runtime depends on module/WASM availability unless self-hosted.
-  \item Native archive fallback requires network and writable cache location.
-  \item Throughput can trail Python-native execution in some workloads.
+  \item Web runtime depends on module/WASM artifact availability unless
+  self-hosted under application-controlled origins.
+  \item Web deployments must satisfy CSP rules for module/WASM fetch origins;
+  default CDN bootstrap therefore introduces an explicit supply-chain boundary.
+  \item Native archive fallback requires network access and writable cache
+  location when model assets are not bundled locally.
+  \item Throughput can trail Python-native execution in current measurements;
+  a major contributor is bridge-level JSON serialization overhead in the native
+  C layer (dynamic allocation and string copy cost on hot paths).
   \item Native execution is in-process via FFI; a crash in dependent native
-  code is fatal to the host Flutter process.
+  code is fatal to the host Flutter process (no process isolation boundary).
   \item Platforms outside declared plugin matrix are unsupported.
-  \item Current mobile benchmark rows use simulator/emulator environments, not
-  physical iOS/Android devices.
+  \item Current mobile benchmark rows use simulator/emulator environments
+  (iOS debug simulator, Android emulator), not physical iOS/Android devices.
   \item Web throughput benchmark rows are not yet included in this report.
 \end{itemize}
 
 \subsection{Recommended Future Work}
 \begin{enumerate}[leftmargin=1.5em]
-  \item Persistent model-cache policy controls and eviction settings.
-  \item Finer-grained phase timing instrumentation in runtime paths.
-  \item Expanded compatibility matrix across Kiwi model families.
-  \item Additional deterministic fixtures for difficult tokenization cases.
-  \item Optional batch analysis API for high-throughput service workloads.
+  \item \textbf{Bridge performance redesign:} replace or complement JSON bridge
+  payloads with typed/native memory transfer to reduce serialization overhead
+  and improve warm-path latency/throughput.
+  \item \textbf{Benchmark external validity:} add release/profile measurements
+  on physical iOS and Android devices and include sustained Web throughput rows
+  under explicit network/cache conditions.
+  \item \textbf{Operational hardening:} provide first-class self-hosting
+  recipes for web module/WASM/model assets, with CSP and integrity examples.
+  \item \textbf{Reliability engineering:} evaluate optional crash-containment
+  architectures for native execution (for example, process separation modes for
+  fault-intolerant deployments).
+  \item \textbf{Compatibility governance:} expand CI validation across Kiwi
+  versions/model families and platform-specific binary packaging combinations.
+  \item \textbf{Quality expansion:} add deterministic regression fixtures for
+  hard tokenization/POS edge cases and broaden integration tests on real target
+  runtimes.
+  \item \textbf{API evolution:} assess optional batch-analysis APIs for
+  high-throughput service scenarios without breaking existing contracts.
 \end{enumerate}
 
 \section{Conclusion}
-\texttt{flutter\_kiwi\_nlp} provides a robust integration architecture for
-cross-platform Korean morphological analysis in Flutter. The package deliberately
-keeps the public API small while implementing substantial internal mechanics for
-runtime parity, build automation, model provisioning, and error transparency.
+\texttt{flutter\_kiwi\_nlp} contributes a native-first, cross-platform
+integration architecture that exposes one stable Dart API while spanning two
+runtime stacks (native FFI and web WASM). The implementation focus is practical
+deployment quality: explicit fallback order, reproducible build hooks, typed
+result contracts, and diagnosable failure behavior.
 
-This revision extends benchmark evidence beyond a desktop-only snapshot by
-adding repeated mobile measurements on iOS simulator and Android emulator with
-the same corpus and option settings used by the desktop benchmark protocol.
+Empirical evidence in this paper indicates three core outcomes. First, runtime
+semantics are operationally aligned across targets under a shared API model.
+Second, the package is suitable for on-device and offline-native inference
+workflows once required model assets are provisioned locally. Third, current
+performance trade-offs are transparent: Flutter-path throughput can trail the
+Python baseline in measured settings, with bridge serialization overhead and
+runtime-context differences as key contributors.
+The updated benchmark revision further shows that mobile warm-path throughput
+can improve under tuned run settings while boundary-decomposed profiling still
+identifies a persistent JSON-path penalty (roughly 11--15\% in this report).
 
-Its practical value is strongest for teams that need one application codebase
-across mobile, desktop, and web while retaining predictable analysis semantics
-and explicit operational controls.
+This paper intentionally does not claim a new morphology model or SOTA language
+accuracy contribution. Its contribution is systems engineering: making Kiwi
+usable in production Flutter applications across Android, iOS, macOS, Linux,
+Windows, and Web with explicit operational contracts.
+
+For practitioners, the key value is reduced integration risk when one codebase
+must ship across platforms while preserving deterministic Korean NLP behavior.
+For researchers and reviewers, the value is a reproducible, implementation-level
+specification that surfaces both strengths and unresolved constraints.
 
 \begin{thebibliography}{99}
 \bibitem{ref_bert}
@@ -2444,8 +2665,9 @@ Future<void> runSample() async {
 
 \section{Appendix C: Reproducibility Statement}
 This report describes repository state and behavior as observed on
-February 17, 2026. Build scripts, dependency versions, defaults, and benchmark
-numbers may change in future releases.
+February 18, 2026. Build scripts, dependency versions, defaults, and benchmark
+numbers may change in future releases. Formalized benchmark/testing pseudocode
+is provided in Appendix D.
 
 Minimal command sequence used for benchmark reproduction:
 The measured mobile rows in this revision are simulator/emulator runs; physical
@@ -2458,23 +2680,36 @@ uv run python tool/benchmark/run_compare.py \
 
 # iOS simulator row (debug in this setup)
 uv run python tool/benchmark/run_compare.py \
-  --device "iPhone 17" --mode debug --trials 10 \
-  --warmup-runs 5 --measure-runs 30
+  --device "iPhone 17" --mode debug --trials 5 \
+  --warmup-runs 3 --measure-runs 15
 
 # Android emulator row (release)
 uv run python tool/benchmark/run_compare.py \
-  --device <android_emulator_id> --mode release --trials 10 \
-  --warmup-runs 5 --measure-runs 30
+  --device <android_emulator_id> --mode release --trials 5 \
+  --warmup-runs 3 --measure-runs 15
 
 # iOS physical device row (release; requires attached iPhone)
 uv run python tool/benchmark/run_compare.py \
-  --device <ios_physical_device_id> --mode release --trials 10 \
-  --warmup-runs 5 --measure-runs 30
+  --device <ios_physical_device_id> --mode release --trials 5 \
+  --warmup-runs 3 --measure-runs 15
 
 # Android physical device row (release; requires attached phone)
 uv run python tool/benchmark/run_compare.py \
-  --device <android_physical_device_id> --mode release --trials 10 \
-  --warmup-runs 5 --measure-runs 30
+  --device <android_physical_device_id> --mode release --trials 5 \
+  --warmup-runs 3 --measure-runs 15
+
+# Core package unit tests (plugin root)
+flutter test test
+
+# Example screenshot(golden) tests (example app)
+cd example
+flutter test test/kiwi_ui_golden_test.dart
+
+# Example integration/acceptance tests (run serially to avoid build.db lock)
+flutter test integration_test/kiwi_runtime_smoke_test.dart -d macos
+flutter test integration_test/kiwi_acceptance_flow_test.dart -d macos
+flutter test integration_test/kiwi_native_runtime_path_test.dart -d macos
+cd ..
 
 # Gold-corpus agreement
 uv run python tool/benchmark/gold_corpus_compare.py \
@@ -2505,17 +2740,92 @@ cat ~/.android/avd/Pixel_9.avd/config.ini
 
 Primary generated artifacts:
 \begin{itemize}[leftmargin=1.5em]
-  \item \path{benchmark/results/comparison.md}
-  \item \path{benchmark/results/ios_debug_t10/comparison.md}
-  \item \path{benchmark/results/android_release_t10/comparison.md}
-  \item \path{benchmark/results/flutter_kiwi_benchmark_trials.json}
-  \item \path{benchmark/results/kiwipiepy_benchmark_trials.json}
+  \item \path{benchmark/results/macos_release_t5_token_count_s10_v2/comparison.md}
+  \item \path{benchmark/results/ios_debug_t5_token_count_s10_v2/comparison.md}
+  \item \path{benchmark/results/android_release_t5_token_count_s10_v2/comparison.md}
+  \item \path{benchmark/results/macos_release_t5_token_count_s10_v2/flutter_kiwi_benchmark_trials.json}
+  \item \path{benchmark/results/macos_release_t5_token_count_s10_v2/kiwipiepy_benchmark_trials.json}
   \item \path{benchmark/results/gold_eval/comparison.md}
   \item \path{benchmark/results/gold_eval/flutter_overall.json}
   \item \path{benchmark/results/gold_eval/kiwipiepy_overall.json}
   \item \path{benchmark/results/wrapper_activity/wrapper_activity.json}
   \item \path{benchmark/results/wrapper_activity/wrapper_activity.md}
   \item per-trial JSON files for each runtime in \path{benchmark/results/}.
+  \item screenshot(golden) baselines in
+  \path{example/test/goldens/}.
 \end{itemize}
+
+\section{Appendix D: Benchmark and Test Execution Pseudocode}
+\begin{algorithm}[t]
+\caption{Cross-runtime benchmark orchestration
+(\texttt{tool/benchmark/run\_compare.py})}
+\label{alg:benchmark-orchestration}
+\begin{algorithmic}[1]
+\Require device $d$, mode $m$, corpus $p$, trials $n$, warmup $w$, measure $r$
+\Ensure comparison report and per-trial JSON artifacts for Flutter and Python
+\State Resolve output directory key from $(d,m,n,w,r)$ and options.
+\For{$i \gets 1$ \textbf{to} $n$}
+  \State Launch Flutter benchmark target
+  \path{example/lib/benchmark_main.dart} on $(d,m)$.
+  \State Wait for marker \texttt{KIWI\_BENCHMARK\_JSON=} in stdout.
+  \If{marker is missing on Android}
+    \State Scan \texttt{adb logcat} and reconstruct payload from base64 chunks.
+  \EndIf
+  \State Persist Flutter trial payload JSON.
+  \State Run Python benchmark (\path{tool/benchmark/kiwipiepy_benchmark.py})
+  with the same corpus and option bitmasks.
+  \State Persist Python trial payload JSON.
+\EndFor
+\State Aggregate trial statistics (mean/stddev, ratio, per-trial snapshots).
+\State Generate \path{comparison.md} via
+\path{tool/benchmark/compare_results.py}.
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{Gold-corpus agreement evaluation
+(\texttt{tool/benchmark/gold\_corpus\_compare.py})}
+\label{alg:gold-corpus-eval}
+\begin{algorithmic}[1]
+\Require asset list $G$, device $d$, mode $m$, top-$N$, build/match options
+\Ensure token/POS agreement metrics and dataset/overall JSON outputs
+\ForAll{$g \in G$}
+  \State Load tab-separated $(sentence, gold\_tokens)$ entries from $g$.
+  \State Run Flutter evaluator target \path{example/lib/gold_eval_main.dart}.
+  \State Parse \texttt{KIWI\_GOLD\_EVAL\_JSON=} payload.
+  \State Run Python evaluator (\texttt{kiwipiepy}) with aligned options.
+  \State Align outputs per sentence (top-1 candidate) and compute:
+  token agreement, POS agreement, token-pair exact, sentence exact.
+  \State Persist per-dataset JSON summaries.
+\EndFor
+\State Aggregate micro/macro overall metrics across datasets.
+\State Emit
+\path{benchmark/results/gold_eval/comparison.md},
+\path{flutter_overall.json}, and \path{kiwipiepy_overall.json}.
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{Unit-test and coverage gate pipeline
+(\texttt{tool/check\_coverage.sh})}
+\label{alg:test-coverage-gate}
+\begin{algorithmic}[1]
+\Require repository root $R$, coverage threshold $\tau$ (default $100\%$)
+\Ensure pass/fail decision with filtered coverage report
+\State Execute \texttt{flutter test --coverage test}.
+\If{\path{coverage/lcov.info} does not exist}
+  \State \textbf{fail} with missing-report error.
+\EndIf
+\State Filter LCOV records, excluding generated/native/web runtime files.
+\State Compute filtered coverage:
+$\texttt{coverage} = 100 \times \texttt{LH}/\texttt{LF}$.
+\State Write filtered report to \path{coverage/lcov.filtered.info}.
+\If{$\texttt{coverage} < \tau$}
+  \State \textbf{fail} coverage gate.
+\Else
+  \State \textbf{pass} and report filtered percentage.
+\EndIf
+\end{algorithmic}
+\end{algorithm}
 
 \end{document}

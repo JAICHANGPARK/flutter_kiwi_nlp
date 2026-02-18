@@ -110,6 +110,7 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 | `KiwiAnalyzer.create` | `Future<KiwiAnalyzer> create({String? modelPath, String? assetModelPath, int numThreads = -1, int buildOptions = KiwiBuildOption.defaultOption, int matchOptions = KiwiMatchOption.allWithNormalizing})` | 분석기 인스턴스를 생성합니다. 모델 경로/빌드 옵션/매치 옵션을 지정할 수 있습니다. |
 | `KiwiAnalyzer.nativeVersion` | `String get nativeVersion` | 현재 백엔드 버전 문자열을 반환합니다. (예: native 버전, web/wasm 버전) |
 | `KiwiAnalyzer.analyze` | `Future<KiwiAnalyzeResult> analyze(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | 입력 문장을 형태소 분석하고 후보 목록을 반환합니다. |
+| `KiwiAnalyzer.analyzeTokenCount` | `Future<int> analyzeTokenCount(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | 분석 결과에서 첫 번째 후보의 토큰 수만 반환합니다. (토크나이저 중심 벤치마크에 유용) |
 | `KiwiAnalyzer.addUserWord` | `Future<void> addUserWord(String word, {String tag = 'NNP', double score = 0.0})` | 런타임 사용자 사전에 단어를 추가합니다. |
 | `KiwiAnalyzer.close` | `Future<void> close()` | 분석기를 종료하고 리소스를 정리합니다. |
 
@@ -158,24 +159,38 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 
 ## 용량 영향 (대략) 및 `kiwipiepy` 비교
 
-기준일: `2026-02-17`
+기준일: `2026-02-18` (워크스페이스 스냅샷)
 
-| 항목 | 기준 | 크기(대략) | 비고 |
+### A. 소스 아티팩트 기준 크기 (앱 패키징 전)
+
+| 항목 | 기준 | 크기 | 비고 |
 | --- | --- | --- | --- |
-| `flutter_kiwi_nlp` 기본 모델 | 압축 해제 모델 디렉터리 (`assets/kiwi-models/cong/base`) | `95MB` | 앱 에셋으로 포함될 수 있는 실제 모델 파일 집합 |
-| `flutter_kiwi_nlp` 기본 모델 (tgz) | 동일 디렉터리를 로컬에서 tar.gz 압축 (`./tmp/flutter_kiwi_model_base.tgz`) | `76MB` | 압축 기준 비교용 로컬 측정치 |
-| `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5MB` | PyPI에 게시된 압축 배포 파일 크기 |
-| Android `libkiwi.so` (참고) | 이 저장소 워크스페이스 빌드 산출물 | `159MB (arm64-v8a)`, `191MB (x86_64)` | 현재 파일은 `with debug_info`, `not stripped` 상태 |
+| `flutter_kiwi_nlp` 기본 모델 | 압축 해제 모델 디렉터리 (`assets/kiwi-models/cong/base`) | `99,308,057 bytes` (`94.71 MiB`) | 앱에 포함되는 모델 원본 총량 기준 |
+| `flutter_kiwi_nlp` 기본 모델 (tgz) | 동일 디렉터리를 로컬에서 `.tgz` 압축 | `79,494,329 bytes` (`75.81 MiB`) | 로컬 압축 기준 비교값 |
+| `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5 MB` (게시값) | PyPI 게시 압축 파일 크기 |
+| Android `libkiwi.so` (소스 아티팩트, arm64-v8a) | `android/src/main/jniLibs/arm64-v8a/libkiwi.so` | `166,229,088 bytes` (`158.53 MiB`) | `with debug_info`, `not stripped` |
+| Android `libkiwi.so` (소스 아티팩트, x86_64) | `android/src/main/jniLibs/x86_64/libkiwi.so` | `200,071,656 bytes` (`190.80 MiB`) | `with debug_info`, `not stripped` |
+
+### B. Example 앱 패키지 결과 (debug vs release)
+
+| 항목 | 기준 | 크기 | 비고 |
+| --- | --- | --- | --- |
+| `app-debug.apk` | `example/build/app/outputs/flutter-apk/app-debug.apk` | `178,454,872 bytes` (`170.19 MiB`) | Example 앱 빌드 결과 |
+| `app-release.apk` | `example/build/app/outputs/flutter-apk/app-release.apk` | `113,030,559 bytes` (`107.80 MiB`) | Example 앱 빌드 결과 |
+| APK 내부 `libkiwi.so` (arm64-v8a) | APK `lib/arm64-v8a/libkiwi.so` 엔트리 | `7,613,192 bytes` | Android 패키징 단계에서 strip 적용 |
+| APK 내부 `libkiwi.so` (x86_64) | APK `lib/x86_64/libkiwi.so` 엔트리 | `11,381,344 bytes` | Android 패키징 단계에서 strip 적용 |
+| release APK 내부 모델 파일 | `assets/.../kiwi-models/cong/base/*` 엔트리 합계 | 압축 `79,574,759 bytes` (원본 `99,308,057 bytes`) | APK ZIP 압축 적용 |
 
 왜 숫자가 달라 보이나요?
 
 - 비교 기준이 다르면 숫자가 크게 달라집니다.
-- `76MB`/`79.5MB`는 압축본(`.tgz`) 크기이고, `95MB`는 압축 해제된
-  모델 파일 총합입니다.
-- Android 네이티브 라이브러리는 ABI별 파일이 따로 있고, 디버그 심볼이
-  포함되면 크기가 크게 증가합니다.
-- 실제 스토어 배포 시에는 플랫폼별 strip/compress/split 적용으로
-  다운로드 크기가 더 작아질 수 있습니다.
+- 소스 아티팩트 크기와 앱 패키지 결과 크기는 파이프라인 단계가 다릅니다.
+- Android 패키징에서 네이티브 라이브러리 debug 심볼 strip이 적용됩니다.
+- 모델 파일은 APK 내부에서 ZIP 압축되고, 소스 디렉터리는 비압축입니다.
+- 현재 APK는 두 ABI(`arm64-v8a`, `x86_64`)를 함께 포함합니다.
+  ABI split 배포를 쓰면 기기별 다운로드 크기를 더 줄일 수 있습니다.
+- 최종 스토어 배포 크기는 app bundle split/배포 압축 정책에 따라
+  추가로 달라질 수 있습니다.
 
 참고 링크:
 
@@ -216,6 +231,12 @@ uv run python tool/benchmark/run_compare.py \
   --build-options 1039 \
   --create-match-options 8454175 \
   --analyze-match-options 8454175
+
+# 토크나이저 중심 비교 (Flutter token_count vs Python tokenize)
+uv run python tool/benchmark/run_compare.py \
+  --device macos \
+  --flutter-analyze-impl token_count \
+  --kiwi-analyze-impl tokenize
 ```
 
 3. 결과 확인
@@ -243,7 +264,24 @@ cat benchmark/results/comparison.md
 - `--build-options`
 - `--create-match-options`
 - `--analyze-match-options` (또는 `--match-options`)
+- `--flutter-analyze-impl` (`json` 또는 `token_count`)
+- `--kiwi-analyze-impl` (`analyze` 또는 `tokenize`)
+- `--sample-count` (품사 비교에 포함할 샘플 문장 수)
 - `--model-path` (양쪽 동일 모델 경로 강제)
+
+Flutter 경로에서 JSON 직렬화/역직렬화 오버헤드를 제외한 토크나이저
+핵심 처리량만 보고 싶다면 `--flutter-analyze-impl token_count`를 사용하세요.
+Python 측에서도 토크나이저 중심 비교를 하려면
+`--kiwi-analyze-impl tokenize`를 사용하세요.
+
+생성 리포트에는 다음이 추가됩니다.
+
+- 샘플 문장 품사 결과 비교 (`flutter_kiwi_nlp` vs `kiwipiepy`)
+- Flutter JSON 직렬화/파싱 오버헤드 지표 (순수 경로 vs 전체 경로)
+
+모바일 타깃(`ios`/`android`)에서는 `kiwipiepy`가 여전히 호스트 Python
+런타임에서 실행됩니다. 동일 디바이스 Python 환경이 없다면 모바일 행은
+cross-runtime 참고값으로 해석하세요.
 
 표기 예시:
 

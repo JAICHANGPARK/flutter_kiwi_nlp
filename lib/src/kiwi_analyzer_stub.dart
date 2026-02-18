@@ -9,6 +9,7 @@ const String _unsupportedMessage =
 ///
 /// All methods throw a [KiwiException] with an unsupported-platform message.
 class KiwiAnalyzer {
+  /// Creates a fallback analyzer for unsupported platforms.
   @pragma('vm:never-inline')
   KiwiAnalyzer();
 
@@ -37,6 +38,16 @@ class KiwiAnalyzer {
   ///
   /// Throws a [KiwiException] on unsupported platforms.
   Future<KiwiAnalyzeResult> analyze(
+    String text, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    _throwUnsupported();
+  }
+
+  /// Analyzes [text] and returns first-candidate token count.
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
+  Future<int> analyzeTokenCount(
     String text, {
     KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
   }) async {

@@ -53,10 +53,23 @@ const String _analyzeMatchOptionsDefine = String.fromEnvironment(
     defaultValue: '8454175',
   ),
 );
+const String _analyzeImplDefine = String.fromEnvironment(
+  'KIWI_BENCH_ANALYZE_IMPL',
+  defaultValue: 'json',
+);
+const String _sampleCountDefine = String.fromEnvironment(
+  'KIWI_BENCH_SAMPLE_COUNT',
+  defaultValue: '10',
+);
 const String _trialIdDefine = String.fromEnvironment(
   'KIWI_BENCH_TRIAL_ID',
   defaultValue: '0',
 );
+const String _jsonMarker = 'KIWI_BENCHMARK_JSON=';
+const String _jsonChunkMarker = 'KIWI_BENCHMARK_JSON_B64_CHUNK=';
+const int _jsonChunkSize = 512;
+const String _analyzeImplJson = 'json';
+const String _analyzeImplTokenCount = 'token_count';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,12 +79,13 @@ Future<void> main() async {
     final _BenchmarkResult result = await _runBenchmark(config);
     final Map<String, Object> payload = result.toJson();
     final String encoded = jsonEncode(payload);
-    final String marker = 'KIWI_BENCHMARK_JSON=$encoded';
+    final String marker = '$_jsonMarker$encoded';
     // stdout is reliable on desktop, while print is more reliable on
     // mobile/web device logs consumed by `flutter run`.
     // ignore: avoid_print
     print(marker);
     stdout.writeln(marker);
+    _emitChunkedPayload(encoded);
 
     if (config.outputPath.isNotEmpty) {
       await _tryWritePayload(config.outputPath, payload);
@@ -89,6 +103,29 @@ Future<void> main() async {
   }
 }
 
+void _emitChunkedPayload(String jsonPayload) {
+  final String encodedB64 = base64Encode(utf8.encode(jsonPayload));
+  if (encodedB64.isEmpty) {
+    return;
+  }
+
+  final int chunkCount =
+      (encodedB64.length + _jsonChunkSize - 1) ~/ _jsonChunkSize;
+  for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+    final int start = chunkIndex * _jsonChunkSize;
+    int end = start + _jsonChunkSize;
+    if (end > encodedB64.length) {
+      end = encodedB64.length;
+    }
+    final String chunk = encodedB64.substring(start, end);
+    final String marker =
+        '$_jsonChunkMarker${chunkIndex + 1}/$chunkCount:$chunk';
+    // ignore: avoid_print
+    print(marker);
+    stdout.writeln(marker);
+  }
+}
+
 class _BenchmarkConfig {
   const _BenchmarkConfig({
     required this.corpusAssetPath,
@@ -101,6 +138,8 @@ class _BenchmarkConfig {
     required this.buildOptions,
     required this.createMatchOptions,
     required this.analyzeMatchOptions,
+    required this.analyzeImpl,
+    required this.sampleCount,
     required this.trialId,
   });
 
@@ -114,6 +153,8 @@ class _BenchmarkConfig {
   final int buildOptions;
   final int createMatchOptions;
   final int analyzeMatchOptions;
+  final String analyzeImpl;
+  final int sampleCount;
   final int trialId;
 
   factory _BenchmarkConfig.fromDefines() {
@@ -136,6 +177,8 @@ class _BenchmarkConfig {
         fallback: 8454175,
         minimum: 0,
       ),
+      analyzeImpl: _parseAnalyzeImpl(_analyzeImplDefine),
+      sampleCount: _parseInt(_sampleCountDefine, fallback: 10, minimum: 0),
       trialId: _parseInt(_trialIdDefine, fallback: 0, minimum: 0),
     );
   }
@@ -155,6 +198,33 @@ class _RunStats {
   final int totalTokens;
 }
 
+class _BenchmarkSentence {
+  const _BenchmarkSentence({required this.text, required this.runeLength});
+
+  final String text;
+  final int runeLength;
+}
+
+class _BenchmarkSampleOutput {
+  const _BenchmarkSampleOutput({
+    required this.sentence,
+    required this.top1Text,
+    required this.top1TokenCount,
+  });
+
+  final String sentence;
+  final String top1Text;
+  final int top1TokenCount;
+
+  Map<String, Object> toJson() {
+    return <String, Object>{
+      'sentence': sentence,
+      'top1_text': top1Text,
+      'top1_token_count': top1TokenCount,
+    };
+  }
+}
+
 class _BenchmarkResult {
   const _BenchmarkResult({
     required this.platform,
@@ -165,6 +235,7 @@ class _BenchmarkResult {
     required this.buildOptions,
     required this.createMatchOptions,
     required this.analyzeMatchOptions,
+    required this.analyzeImpl,
     required this.trialId,
     required this.sentenceCount,
     required this.initMs,
@@ -172,6 +243,9 @@ class _BenchmarkResult {
     required this.totalAnalyses,
     required this.totalChars,
     required this.totalTokens,
+    required this.pureElapsedMs,
+    required this.fullElapsedMs,
+    required this.sampleOutputs,
   });
 
   final String platform;
@@ -182,6 +256,7 @@ class _BenchmarkResult {
   final int buildOptions;
   final int createMatchOptions;
   final int analyzeMatchOptions;
+  final String analyzeImpl;
   final int trialId;
   final int sentenceCount;
   final double initMs;
@@ -189,6 +264,14 @@ class _BenchmarkResult {
   final int totalAnalyses;
   final int totalChars;
   final int totalTokens;
+  final double pureElapsedMs;
+  final double fullElapsedMs;
+  final List<_BenchmarkSampleOutput> sampleOutputs;
+
+  double get _jsonOverheadMs {
+    final double value = fullElapsedMs - pureElapsedMs;
+    return value > 0 ? value : 0;
+  }
 
   Map<String, Object> toJson() {
     final double elapsedSeconds = elapsedMs / 1000.0;
@@ -198,6 +281,24 @@ class _BenchmarkResult {
     final double avgLatencyMs = _safeDivide(elapsedMs, totalAnalyses);
     final double avgTokenLatencyUs = _safeDivide(
       elapsedMs * 1000.0,
+      totalTokens,
+    );
+    final double pureAnalysesPerSec = _safeDivide(
+      totalAnalyses,
+      pureElapsedMs / 1000.0,
+    );
+    final double fullAnalysesPerSec = _safeDivide(
+      totalAnalyses,
+      fullElapsedMs / 1000.0,
+    );
+    final double jsonOverheadMs = _jsonOverheadMs;
+    final double jsonOverheadRatio = _safeDivide(jsonOverheadMs, fullElapsedMs);
+    final double jsonOverheadPerAnalysisMs = _safeDivide(
+      jsonOverheadMs,
+      totalAnalyses,
+    );
+    final double jsonOverheadPerTokenUs = _safeDivide(
+      jsonOverheadMs * 1000.0,
       totalTokens,
     );
 
@@ -212,8 +313,10 @@ class _BenchmarkResult {
       'build_options': buildOptions,
       'create_match_options': createMatchOptions,
       'analyze_match_options': analyzeMatchOptions,
+      'analyze_impl': analyzeImpl,
       'trial_id': trialId,
       'sentence_count': sentenceCount,
+      'sample_count': sampleOutputs.length,
       'init_ms': initMs,
       'elapsed_ms': elapsedMs,
       'total_analyses': totalAnalyses,
@@ -224,12 +327,26 @@ class _BenchmarkResult {
       'tokens_per_sec': tokensPerSec,
       'avg_latency_ms': avgLatencyMs,
       'avg_token_latency_us': avgTokenLatencyUs,
+      'pure_elapsed_ms': pureElapsedMs,
+      'full_elapsed_ms': fullElapsedMs,
+      'pure_analyses_per_sec': pureAnalysesPerSec,
+      'full_analyses_per_sec': fullAnalysesPerSec,
+      'json_overhead_ms': jsonOverheadMs,
+      'json_overhead_ratio': jsonOverheadRatio,
+      'json_overhead_percent': jsonOverheadRatio * 100.0,
+      'json_overhead_per_analysis_ms': jsonOverheadPerAnalysisMs,
+      'json_overhead_per_token_us': jsonOverheadPerTokenUs,
+      'sample_outputs': sampleOutputs
+          .map((final _BenchmarkSampleOutput sample) => sample.toJson())
+          .toList(growable: false),
     };
   }
 }
 
 Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
-  final List<String> sentences = await _loadSentences(config.corpusAssetPath);
+  final List<_BenchmarkSentence> sentences = await _loadSentences(
+    config.corpusAssetPath,
+  );
 
   final Stopwatch initStopwatch = Stopwatch()..start();
   final KiwiAnalyzer analyzer = await _createAnalyzer(config);
@@ -240,20 +357,55 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       topN: config.topN,
       matchOptions: config.analyzeMatchOptions,
     );
+    final String primaryImpl = config.analyzeImpl;
+    final String secondaryImpl = primaryImpl == _analyzeImplJson
+        ? _analyzeImplTokenCount
+        : _analyzeImplJson;
 
     await _executeRuns(
       analyzer: analyzer,
       sentences: sentences,
       runs: config.warmupRuns,
       options: options,
+      analyzeImpl: primaryImpl,
     );
 
-    final _RunStats measured = await _executeRuns(
+    final _RunStats primaryMeasured = await _executeRuns(
       analyzer: analyzer,
       sentences: sentences,
       runs: config.measureRuns,
       options: options,
+      analyzeImpl: primaryImpl,
     );
+    await _executeRuns(
+      analyzer: analyzer,
+      sentences: sentences,
+      runs: config.warmupRuns,
+      options: options,
+      analyzeImpl: secondaryImpl,
+    );
+    final _RunStats secondaryMeasured = await _executeRuns(
+      analyzer: analyzer,
+      sentences: sentences,
+      runs: config.measureRuns,
+      options: options,
+      analyzeImpl: secondaryImpl,
+    );
+
+    final _RunStats measured = primaryMeasured;
+    final _RunStats fullMeasured = primaryImpl == _analyzeImplJson
+        ? primaryMeasured
+        : secondaryMeasured;
+    final _RunStats pureMeasured = primaryImpl == _analyzeImplTokenCount
+        ? primaryMeasured
+        : secondaryMeasured;
+    final List<_BenchmarkSampleOutput> sampleOutputs =
+        await _collectSampleOutputs(
+          analyzer: analyzer,
+          sentences: sentences,
+          options: options,
+          sampleCount: config.sampleCount,
+        );
 
     return _BenchmarkResult(
       platform: Platform.operatingSystem,
@@ -264,6 +416,7 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       buildOptions: config.buildOptions,
       createMatchOptions: config.createMatchOptions,
       analyzeMatchOptions: config.analyzeMatchOptions,
+      analyzeImpl: config.analyzeImpl,
       trialId: config.trialId,
       sentenceCount: sentences.length,
       initMs: initStopwatch.elapsedMicroseconds / 1000.0,
@@ -271,6 +424,9 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       totalAnalyses: measured.totalAnalyses,
       totalChars: measured.totalChars,
       totalTokens: measured.totalTokens,
+      pureElapsedMs: pureMeasured.elapsedMs,
+      fullElapsedMs: fullMeasured.elapsedMs,
+      sampleOutputs: sampleOutputs,
     );
   } finally {
     await analyzer.close();
@@ -294,42 +450,52 @@ Future<KiwiAnalyzer> _createAnalyzer(_BenchmarkConfig config) {
   );
 }
 
-Future<List<String>> _loadSentences(String corpusAssetPath) async {
+Future<List<_BenchmarkSentence>> _loadSentences(String corpusAssetPath) async {
   final String corpusText = await rootBundle.loadString(corpusAssetPath);
-  final List<String> sentences = corpusText
+  final List<String> lines = corpusText
       .split('\n')
       .map((String sentence) => sentence.trim())
       .where((String sentence) => sentence.isNotEmpty)
       .toList(growable: false);
 
-  if (sentences.isEmpty) {
+  if (lines.isEmpty) {
     throw StateError('Corpus is empty: $corpusAssetPath');
   }
 
-  return sentences;
+  return lines
+      .map(
+        (final String sentence) => _BenchmarkSentence(
+          text: sentence,
+          runeLength: sentence.runes.length,
+        ),
+      )
+      .toList(growable: false);
 }
 
 Future<_RunStats> _executeRuns({
   required KiwiAnalyzer analyzer,
-  required List<String> sentences,
+  required List<_BenchmarkSentence> sentences,
   required int runs,
   required KiwiAnalyzeOptions options,
+  required String analyzeImpl,
 }) async {
   int totalAnalyses = 0;
   int totalChars = 0;
   int totalTokens = 0;
+  final bool useTokenCount = analyzeImpl == _analyzeImplTokenCount;
 
   final Stopwatch stopwatch = Stopwatch()..start();
 
   for (int runIndex = 0; runIndex < runs; runIndex += 1) {
-    for (final String sentence in sentences) {
-      final KiwiAnalyzeResult result = await analyzer.analyze(
-        sentence,
-        options: options,
-      );
+    for (final _BenchmarkSentence sentence in sentences) {
+      final int tokenCount = useTokenCount
+          ? await analyzer.analyzeTokenCount(sentence.text, options: options)
+          : _tokenCountOfBestCandidate(
+              await analyzer.analyze(sentence.text, options: options),
+            );
       totalAnalyses += 1;
-      totalChars += sentence.runes.length;
-      totalTokens += _tokenCountOfBestCandidate(result);
+      totalChars += sentence.runeLength;
+      totalTokens += tokenCount;
     }
   }
 
@@ -351,6 +517,44 @@ int _tokenCountOfBestCandidate(KiwiAnalyzeResult result) {
   return result.candidates.first.tokens.length;
 }
 
+Future<List<_BenchmarkSampleOutput>> _collectSampleOutputs({
+  required KiwiAnalyzer analyzer,
+  required List<_BenchmarkSentence> sentences,
+  required KiwiAnalyzeOptions options,
+  required int sampleCount,
+}) async {
+  if (sampleCount <= 0 || sentences.isEmpty) {
+    return const <_BenchmarkSampleOutput>[];
+  }
+  final int limit = sampleCount < sentences.length
+      ? sampleCount
+      : sentences.length;
+  final List<_BenchmarkSampleOutput> outputs = <_BenchmarkSampleOutput>[];
+  for (int index = 0; index < limit; index += 1) {
+    final _BenchmarkSentence sentence = sentences[index];
+    final KiwiAnalyzeResult result = await analyzer.analyze(
+      sentence.text,
+      options: options,
+    );
+    final List<KiwiToken> tokens = result.candidates.isEmpty
+        ? const <KiwiToken>[]
+        : result.candidates.first.tokens;
+    final String top1Text = tokens.isEmpty
+        ? '(결과 없음)'
+        : tokens
+              .map((final KiwiToken token) => '${token.form}/${token.tag}')
+              .join(' ');
+    outputs.add(
+      _BenchmarkSampleOutput(
+        sentence: sentence.text,
+        top1Text: top1Text,
+        top1TokenCount: tokens.length,
+      ),
+    );
+  }
+  return outputs;
+}
+
 double _safeDivide(num numerator, num denominator) {
   if (denominator <= 0) {
     return 0;
@@ -366,6 +570,14 @@ int _parseInt(String rawValue, {required int fallback, required int minimum}) {
   }
 
   return parsed;
+}
+
+String _parseAnalyzeImpl(String rawValue) {
+  final String normalized = rawValue.trim().toLowerCase();
+  if (normalized == _analyzeImplTokenCount) {
+    return _analyzeImplTokenCount;
+  }
+  return _analyzeImplJson;
 }
 
 Future<void> _tryWritePayload(

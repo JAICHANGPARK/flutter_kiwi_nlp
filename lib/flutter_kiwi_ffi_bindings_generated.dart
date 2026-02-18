@@ -105,6 +105,48 @@ class FlutterKiwiFfiBindings {
         )
       >();
 
+  /// Runs analysis and returns the token count of the first candidate.
+  /// Returns 0 on success and writes to out_token_count.
+  int flutter_kiwi_ffi_analyze_token_count(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Char> text,
+    int top_n,
+    int match_options,
+    ffi.Pointer<ffi.Int32> out_token_count,
+  ) {
+    return _flutter_kiwi_ffi_analyze_token_count(
+      handle,
+      text,
+      top_n,
+      match_options,
+      out_token_count,
+    );
+  }
+
+  late final _flutter_kiwi_ffi_analyze_token_countPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(
+            ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+            ffi.Int32,
+            ffi.Pointer<ffi.Int32>,
+          )
+        >
+      >('flutter_kiwi_ffi_analyze_token_count');
+  late final _flutter_kiwi_ffi_analyze_token_count =
+      _flutter_kiwi_ffi_analyze_token_countPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+              ffi.Pointer<ffi.Char>,
+              int,
+              int,
+              ffi.Pointer<ffi.Int32>,
+            )
+          >();
+
   /// Adds a user word to the in-memory dictionary.
   int flutter_kiwi_ffi_add_user_word(
     ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,

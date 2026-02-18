@@ -1,3 +1,4 @@
+// Verifies option bit-mask composition and request option defaults.
 import 'package:flutter_kiwi_nlp/src/kiwi_options.dart';
 import 'package:flutter_test/flutter_test.dart';
 

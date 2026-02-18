@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
+import os
+import select
 import shlex
 import subprocess
 import sys
@@ -78,6 +81,24 @@ def parse_args() -> argparse.Namespace:
         help='Bitwise analyze-time match option value passed to both runtimes.',
     )
     parser.add_argument(
+        '--flutter-analyze-impl',
+        choices=('json', 'token_count'),
+        default='json',
+        help='Flutter benchmark analyze path: json(full payload) or token_count.',
+    )
+    parser.add_argument(
+        '--kiwi-analyze-impl',
+        choices=('analyze', 'tokenize'),
+        default='analyze',
+        help='kiwipiepy benchmark API path: analyze(top_n) or tokenize().',
+    )
+    parser.add_argument(
+        '--sample-count',
+        type=int,
+        default=10,
+        help='Number of sample sentences to include with POS outputs.',
+    )
+    parser.add_argument(
         '--trials',
         type=int,
         default=5,
@@ -124,11 +145,15 @@ def run_flutter_benchmark(
     *,
     cwd: Path,
     timeout_seconds: int,
+    output_json_path: Path | None = None,
+    android_device_id: str | None = None,
 ) -> dict[str, object]:
     print(f"$ {shlex.join(command)}")
 
     marker = 'KIWI_BENCHMARK_JSON='
+    chunk_marker = 'KIWI_BENCHMARK_JSON_B64_CHUNK='
     deadline = time.monotonic() + timeout_seconds
+    debug_parser = os.environ.get('KIWI_BENCH_DEBUG_PARSER') == '1'
 
     process = subprocess.Popen(
         command,
@@ -140,27 +165,224 @@ def run_flutter_benchmark(
     )
 
     payload: dict[str, object] | None = None
+    chunk_total: int | None = None
+    chunk_parts: dict[int, str] = {}
+    next_logcat_poll_time = 0.0
 
-    try:
-        assert process.stdout is not None
-        for line in process.stdout:
-            print(line, end='')
+    def try_load_output_payload() -> dict[str, object] | None:
+        if output_json_path is None or not output_json_path.exists():
+            return None
+        try:
+            parsed = json.loads(output_json_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+        return None
 
+    def try_load_logcat_payload() -> dict[str, object] | None:
+        if android_device_id is None:
+            return None
+        completed = subprocess.run(
+            ['adb', '-s', android_device_id, 'logcat', '-d'],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            return None
+
+        chunk_total_local: int | None = None
+        chunk_parts_local: dict[int, str] = {}
+        for line in completed.stdout.splitlines():
             marker_index = line.find(marker)
             if marker_index != -1:
                 raw_json = line[marker_index + len(marker) :].strip()
-                parsed = json.loads(raw_json)
-                if not isinstance(parsed, dict):
-                    raise TypeError(
-                        'Flutter benchmark payload must be a JSON object.'
-                    )
-                payload = parsed
+                try:
+                    parsed = json.loads(raw_json)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    return parsed
+
+            chunk_marker_index = line.find(chunk_marker)
+            if chunk_marker_index == -1:
+                continue
+
+            raw_chunk = line[chunk_marker_index + len(chunk_marker) :].strip()
+            slash_index = raw_chunk.find('/')
+            colon_index = raw_chunk.find(':')
+            if slash_index <= 0 or colon_index <= slash_index + 1:
+                continue
+            try:
+                chunk_index = int(raw_chunk[:slash_index])
+                total_count = int(raw_chunk[slash_index + 1 : colon_index])
+            except ValueError:
+                continue
+            if chunk_index <= 0 or total_count <= 0:
+                continue
+            if chunk_index > total_count:
+                continue
+
+            chunk_body = raw_chunk[colon_index + 1 :]
+            if not chunk_body:
+                continue
+
+            if chunk_total_local is None:
+                chunk_total_local = total_count
+            elif chunk_total_local != total_count:
+                continue
+
+            chunk_parts_local[chunk_index] = chunk_body
+
+        if chunk_total_local is None:
+            return None
+        if len(chunk_parts_local) != chunk_total_local:
+            return None
+
+        joined = ''.join(
+            chunk_parts_local[index]
+            for index in range(1, chunk_total_local + 1)
+        )
+        try:
+            decoded = json.loads(base64.b64decode(joined).decode('utf-8'))
+        except (
+            ValueError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            return None
+        if isinstance(decoded, dict):
+            return decoded
+        return None
+
+    def try_parse_chunk_line(line: str) -> dict[str, object] | None:
+        marker_index = line.find(chunk_marker)
+        if marker_index == -1:
+            return None
+
+        raw_chunk = line[marker_index + len(chunk_marker) :].strip()
+        # Format: "<index>/<total>:<base64 chunk>"
+        slash_index = raw_chunk.find('/')
+        colon_index = raw_chunk.find(':')
+        if slash_index <= 0 or colon_index <= slash_index + 1:
+            return None
+
+        try:
+            chunk_index = int(raw_chunk[:slash_index])
+            total_count = int(raw_chunk[slash_index + 1 : colon_index])
+        except ValueError:
+            return None
+
+        if chunk_index <= 0 or total_count <= 0:
+            return None
+        if chunk_index > total_count:
+            return None
+
+        chunk_body = raw_chunk[colon_index + 1 :]
+        if not chunk_body:
+            return None
+
+        nonlocal chunk_total
+        if chunk_total is None:
+            chunk_total = total_count
+        elif chunk_total != total_count:
+            # Ignore mixed payloads from another app run and keep current set.
+            return None
+
+        chunk_parts[chunk_index] = chunk_body
+        if debug_parser:
+            print(
+                f'[parser] chunk {chunk_index}/{chunk_total} '
+                f'len={len(chunk_body)} parts={len(chunk_parts)}',
+                flush=True,
+            )
+        if len(chunk_parts) != chunk_total:
+            return None
+
+        joined = ''.join(chunk_parts[index] for index in range(1, chunk_total + 1))
+        try:
+            decoded = json.loads(base64.b64decode(joined).decode('utf-8'))
+        except (
+            ValueError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            if debug_parser:
+                print(
+                    '[parser] failed to decode assembled chunk payload',
+                    flush=True,
+                )
+            return None
+        if isinstance(decoded, dict):
+            if debug_parser:
+                print('[parser] decoded chunk payload', flush=True)
+            return decoded
+        return None
+
+    try:
+        if android_device_id is not None:
+            subprocess.run(
+                ['adb', '-s', android_device_id, 'logcat', '-c'],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        assert process.stdout is not None
+        while True:
+            payload = try_load_output_payload()
+            if payload is not None:
+                break
+
+            if android_device_id is not None:
+                now = time.monotonic()
+                if now >= next_logcat_poll_time:
+                    payload = try_load_logcat_payload()
+                    next_logcat_poll_time = now + 1.0
+                if payload is not None:
+                    break
+
+            readable, _, _ = select.select([process.stdout], [], [], 0.25)
+            if readable:
+                line = process.stdout.readline()
+                if not line:
+                    if process.poll() is not None:
+                        break
+                else:
+                    print(line, end='')
+                    marker_index = line.find(marker)
+                    if marker_index != -1:
+                        raw_json = line[marker_index + len(marker) :].strip()
+                        try:
+                            parsed = json.loads(raw_json)
+                        except json.JSONDecodeError:
+                            if debug_parser:
+                                print(
+                                    '[parser] JSON marker line was truncated',
+                                    flush=True,
+                                )
+                            parsed = None
+                        if isinstance(parsed, dict):
+                            if debug_parser:
+                                print('[parser] decoded direct JSON marker', flush=True)
+                            payload = parsed
+                            break
+
+                    parsed_chunk = try_parse_chunk_line(line)
+                    if parsed_chunk is not None:
+                        payload = parsed_chunk
+                        break
+
+            if process.poll() is not None:
                 break
 
             if time.monotonic() > deadline:
                 raise TimeoutError(
                     'Timed out waiting for flutter benchmark output.'
                 )
+
+        if payload is None:
+            payload = try_load_output_payload()
 
         if payload is None:
             raise RuntimeError('Could not find KIWI_BENCHMARK_JSON in output.')
@@ -186,6 +408,8 @@ def main() -> int:
         raise ValueError('--create-match-options must be >= 0')
     if args.analyze_match_options < 0:
         raise ValueError('--analyze-match-options must be >= 0')
+    if args.sample_count < 0:
+        raise ValueError('--sample-count must be >= 0')
 
     repo_root = Path(__file__).resolve().parents[2]
     output_dir = args.output_dir
@@ -221,6 +445,8 @@ def main() -> int:
         f'--dart-define=KIWI_BENCH_BUILD_OPTIONS={args.build_options}',
         f'--dart-define=KIWI_BENCH_CREATE_MATCH_OPTIONS={args.create_match_options}',
         f'--dart-define=KIWI_BENCH_ANALYZE_MATCH_OPTIONS={args.analyze_match_options}',
+        f'--dart-define=KIWI_BENCH_ANALYZE_IMPL={args.flutter_analyze_impl}',
+        f'--dart-define=KIWI_BENCH_SAMPLE_COUNT={args.sample_count}',
     ]
     if args.model_path:
         flutter_command.append(
@@ -246,6 +472,10 @@ def main() -> int:
         str(args.create_match_options),
         '--analyze-match-options',
         str(args.analyze_match_options),
+        '--analyze-impl',
+        args.kiwi_analyze_impl,
+        '--sample-count',
+        str(args.sample_count),
     ]
     if args.model_path:
         kiwi_command_base.extend(['--model-path', args.model_path])
@@ -258,16 +488,26 @@ def main() -> int:
     for trial_id in range(1, args.trials + 1):
         print(f'\n=== Trial {trial_id}/{args.trials} ===')
 
+        flutter_trial_json = (
+            output_dir / f'flutter_kiwi_benchmark_trial_{trial_id:02d}.json'
+        )
+        flutter_trial_json.unlink(missing_ok=True)
         trial_flutter_command = flutter_command + [
-            f'--dart-define=KIWI_BENCH_TRIAL_ID={trial_id}'
+            f'--dart-define=KIWI_BENCH_TRIAL_ID={trial_id}',
+            f'--dart-define=KIWI_BENCH_OUTPUT_PATH={flutter_trial_json}',
         ]
+        android_device_id: str | None = None
+        if args.device.startswith('emulator-'):
+            android_device_id = args.device
         flutter_payload = run_flutter_benchmark(
             trial_flutter_command,
             cwd=example_dir,
             timeout_seconds=args.flutter_timeout_seconds,
+            output_json_path=flutter_trial_json,
+            android_device_id=android_device_id,
         )
         flutter_trials.append(flutter_payload)
-        (output_dir / f'flutter_kiwi_benchmark_trial_{trial_id:02d}.json').write_text(
+        flutter_trial_json.write_text(
             json.dumps(flutter_payload, ensure_ascii=False, indent=2)
         )
 

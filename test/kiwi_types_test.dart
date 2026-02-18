@@ -1,3 +1,4 @@
+// Verifies JSON decoding behavior for Kiwi analysis result model types.
 import 'package:flutter_kiwi_nlp/src/kiwi_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 

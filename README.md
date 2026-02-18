@@ -159,6 +159,7 @@ Then run:
 | `KiwiAnalyzer.create` | `Future<KiwiAnalyzer> create({String? modelPath, String? assetModelPath, int numThreads = -1, int buildOptions = KiwiBuildOption.defaultOption, int matchOptions = KiwiMatchOption.allWithNormalizing})` | Creates an analyzer instance. You can control model path, build options, and match options. |
 | `KiwiAnalyzer.nativeVersion` | `String get nativeVersion` | Returns a backend version string (for example native version or web/wasm version). |
 | `KiwiAnalyzer.analyze` | `Future<KiwiAnalyzeResult> analyze(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | Runs morphological analysis and returns candidate results. |
+| `KiwiAnalyzer.analyzeTokenCount` | `Future<int> analyzeTokenCount(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | Runs analysis and returns only the first-candidate token count (useful for tokenizer-focused benchmarks). |
 | `KiwiAnalyzer.addUserWord` | `Future<void> addUserWord(String word, {String tag = 'NNP', double score = 0.0})` | Adds a runtime user dictionary entry. |
 | `KiwiAnalyzer.close` | `Future<void> close()` | Closes the analyzer and releases resources. |
 
@@ -208,24 +209,37 @@ On unsupported platforms, creating or calling `KiwiAnalyzer` throws
 
 ## Size Impact (Approx.) and `kiwipiepy` Comparison
 
-As of `2026-02-17`:
+As of `2026-02-18` (workspace snapshot):
 
-| Item | Basis | Size (Approx.) | Notes |
+### A. Source artifact footprint (before app packaging)
+
+| Item | Basis | Size | Notes |
 | --- | --- | --- | --- |
-| `flutter_kiwi_nlp` default model | Uncompressed model directory (`assets/kiwi-models/cong/base`) | `95MB` | Actual model file set that may be bundled as app assets |
-| `flutter_kiwi_nlp` default model (tgz) | Same directory compressed locally (`./tmp/flutter_kiwi_model_base.tgz`) | `76MB` | Local compressed-size reference for fair comparison |
-| `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5MB` | Published compressed package size on PyPI |
-| Android `libkiwi.so` (reference) | Workspace build outputs in this repo | `159MB (arm64-v8a)`, `191MB (x86_64)` | Current binaries are `with debug_info`, `not stripped` |
+| `flutter_kiwi_nlp` default model | Uncompressed model directory (`assets/kiwi-models/cong/base`) | `99,308,057 bytes` (`94.71 MiB`) | Actual bundled model payload basis |
+| `flutter_kiwi_nlp` default model (tgz) | Same directory compressed locally (`.tgz`) | `79,494,329 bytes` (`75.81 MiB`) | Local compressed-size reference |
+| `kiwipiepy_model 0.22.1` | PyPI source distribution (`.tar.gz`) | `79.5 MB` (published) | Published compressed package size on PyPI |
+| Android `libkiwi.so` (source artifact, arm64-v8a) | `android/src/main/jniLibs/arm64-v8a/libkiwi.so` | `166,229,088 bytes` (`158.53 MiB`) | `with debug_info`, `not stripped` |
+| Android `libkiwi.so` (source artifact, x86_64) | `android/src/main/jniLibs/x86_64/libkiwi.so` | `200,071,656 bytes` (`190.80 MiB`) | `with debug_info`, `not stripped` |
+
+### B. Example app package output (debug vs release)
+
+| Item | Basis | Size | Notes |
+| --- | --- | --- | --- |
+| `app-debug.apk` | `example/build/app/outputs/flutter-apk/app-debug.apk` | `178,454,872 bytes` (`170.19 MiB`) | Example app build output |
+| `app-release.apk` | `example/build/app/outputs/flutter-apk/app-release.apk` | `113,030,559 bytes` (`107.80 MiB`) | Example app build output |
+| `libkiwi.so` inside APK (arm64-v8a) | APK `lib/arm64-v8a/libkiwi.so` entry | `7,613,192 bytes` | Stripped during Android packaging |
+| `libkiwi.so` inside APK (x86_64) | APK `lib/x86_64/libkiwi.so` entry | `11,381,344 bytes` | Stripped during Android packaging |
+| Model files inside release APK | Sum of `assets/.../kiwi-models/cong/base/*` entries | `79,574,759 bytes` compressed (`99,308,057` uncompressed) | ZIP-level compression applied |
 
 Why do the numbers look different?
 
 - Different measurement bases produce different numbers.
-- `76MB`/`79.5MB` are compressed archives, while `95MB` is uncompressed model
-  contents.
-- Android native binaries are per-ABI, and size grows significantly when debug
-  symbols are included.
-- Store delivery size is usually smaller due to strip/compress/split in release
-  pipelines.
+- Source artifact size and packaged output size are different stages.
+- Android packaging strips debug symbols from native libraries by default.
+- Model files are ZIP-compressed inside APK, while source directories are not.
+- Current APK contains both ABIs (`arm64-v8a`, `x86_64`); ABI-split delivery
+  can reduce per-device download size.
+- Final store delivery size can further differ by app bundle split/compression.
 
 References:
 
@@ -266,6 +280,12 @@ uv run python tool/benchmark/run_compare.py \
   --build-options 1039 \
   --create-match-options 8454175 \
   --analyze-match-options 8454175
+
+# Tokenizer-oriented comparison (Flutter token_count vs Python tokenize).
+uv run python tool/benchmark/run_compare.py \
+  --device macos \
+  --flutter-analyze-impl token_count \
+  --kiwi-analyze-impl tokenize
 ```
 
 3. Inspect the report
@@ -293,7 +313,25 @@ Useful `run_compare.py` options:
 - `--build-options`
 - `--create-match-options`
 - `--analyze-match-options` (or `--match-options`)
+- `--flutter-analyze-impl` (`json` or `token_count`)
+- `--kiwi-analyze-impl` (`analyze` or `tokenize`)
+- `--sample-count` (sample sentence count for POS output comparison)
 - `--model-path` (force the same model path on both runtimes)
+
+Use `--flutter-analyze-impl token_count` when you want to isolate tokenizer
+core throughput on Flutter by excluding JSON materialization/deserialization
+overhead from the measured path.
+Use `--kiwi-analyze-impl tokenize` when you want tokenizer-oriented comparison
+on the Python side.
+
+The generated report now includes:
+
+- Sample sentence POS output comparison (`flutter_kiwi_nlp` vs `kiwipiepy`)
+- Flutter JSON serialization/parsing overhead metrics (pure vs full path)
+
+On mobile targets (`ios`/`android`), `kiwipiepy` still runs on the host Python
+runtime. Treat mobile rows as cross-runtime reference unless you provide a
+same-device Python environment.
 
 Example table format:
 

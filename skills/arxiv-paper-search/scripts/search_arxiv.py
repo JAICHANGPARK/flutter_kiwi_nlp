@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,11 +33,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--query",
-        help="General query mapped to all:\"...\" in arXiv search syntax.",
+        help="General query mapped to all:\"...\" in arXiv syntax.",
     )
     parser.add_argument(
         "--title",
-        help="Title query mapped to ti:\"...\" in arXiv search syntax.",
+        help="Title query mapped to ti:\"...\" in arXiv syntax.",
     )
     parser.add_argument(
         "--author",
@@ -65,6 +66,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Published date upper bound in YYYY-MM-DD.",
     )
     parser.add_argument(
+        "--days",
+        type=int,
+        help=(
+            "Relative date window (latest N days, including today). "
+            "Cannot be combined with --from-date/--to-date."
+        ),
+    )
+    parser.add_argument(
         "--start",
         type=int,
         default=0,
@@ -79,8 +88,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--sort-by",
         choices=["relevance", "lastUpdatedDate", "submittedDate"],
-        default="relevance",
-        help="Sort mode used by arXiv.",
+        help=(
+            "Sort mode used by arXiv. Default is submittedDate when "
+            "date filters are used, otherwise relevance."
+        ),
     )
     parser.add_argument(
         "--sort-order",
@@ -95,6 +106,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="HTTP timeout in seconds (default: 20).",
     )
     parser.add_argument(
+        "--retry",
+        type=int,
+        default=2,
+        help="Retry count for transient API errors (default: 2).",
+    )
+    parser.add_argument(
+        "--retry-backoff",
+        type=float,
+        default=1.5,
+        help="Linear backoff seconds between retries (default: 1.5).",
+    )
+    parser.add_argument(
         "--include-abstract",
         action="store_true",
         help="Include abstracts in text output.",
@@ -103,6 +126,25 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--include-bibtex",
         action="store_true",
         help="Include generated BibTeX entries.",
+    )
+    parser.add_argument(
+        "--require-pdf",
+        action="store_true",
+        help="Only return entries that provide a PDF link.",
+    )
+    parser.add_argument(
+        "--dedupe-by-title",
+        action="store_true",
+        help="Drop duplicate titles after filtering (keep first occurrence).",
+    )
+    parser.add_argument(
+        "--max-abstract-chars",
+        type=int,
+        default=0,
+        help=(
+            "Trim abstract to at most N characters "
+            "(0 keeps full text, default: 0)."
+        ),
     )
     parser.add_argument(
         "--json",
@@ -128,44 +170,114 @@ def validate_args(
     parser: argparse.ArgumentParser,
     args: argparse.Namespace,
 ) -> None:
+    has_raw_query = bool(args.raw_query)
     has_structured_terms = bool(
         args.query or args.title or args.author or args.category,
     )
-    if not args.raw_query and not has_structured_terms:
-        parser.error(
-            "provide at least one search field or use --raw-query",
-        )
+    if not has_raw_query and not has_structured_terms:
+        parser.error("provide at least one search field or use --raw-query")
+    if has_raw_query and has_structured_terms:
+        parser.error("--raw-query cannot be combined with structured fields")
     if args.max_results < 1 or args.max_results > 200:
         parser.error("--max-results must be between 1 and 200")
     if args.start < 0:
         parser.error("--start must be zero or greater")
+    if args.days is not None and args.days < 1:
+        parser.error("--days must be at least 1")
+    if args.days is not None and (args.from_date or args.to_date):
+        parser.error(
+            "--days cannot be combined with --from-date or --to-date",
+        )
     if args.from_date and args.to_date and args.from_date > args.to_date:
-        parser.error("--from-date must be earlier than or equal to --to-date")
+        parser.error("--from-date must be <= --to-date")
+    if args.timeout <= 0:
+        parser.error("--timeout must be greater than 0")
+    if args.retry < 0:
+        parser.error("--retry must be zero or greater")
+    if args.retry_backoff < 0:
+        parser.error("--retry-backoff must be zero or greater")
+    if args.max_abstract_chars < 0:
+        parser.error("--max-abstract-chars must be zero or greater")
 
 
 def run_search(args: argparse.Namespace) -> dict[str, object]:
+    from_date, to_date = resolve_date_window(
+        from_date=args.from_date,
+        to_date=args.to_date,
+        days=args.days,
+    )
     query = args.raw_query or build_query(
         query=args.query,
         title=args.title,
         authors=args.author,
         categories=args.category,
     )
+    sort_by = resolve_sort_by(
+        sort_by=args.sort_by,
+        from_date=from_date,
+        to_date=to_date,
+    )
     xml_text = fetch_xml(
         query=query,
         start=args.start,
         max_results=args.max_results,
-        sort_by=args.sort_by,
+        sort_by=sort_by,
         sort_order=args.sort_order,
         timeout=args.timeout,
+        retry=args.retry,
+        retry_backoff=args.retry_backoff,
     )
     feed = parse_feed(
         xml_text=xml_text,
-        from_date=args.from_date,
-        to_date=args.to_date,
+        from_date=from_date,
+        to_date=to_date,
         include_bibtex=args.include_bibtex,
+        require_pdf=args.require_pdf,
+        dedupe_by_title=args.dedupe_by_title,
+        max_abstract_chars=args.max_abstract_chars,
     )
     feed["query"] = query
+    feed["sort_by"] = sort_by
+    if args.days is not None:
+        feed["date_window"] = {
+            "mode": "days",
+            "days": args.days,
+            "from_date": from_date.isoformat() if from_date else None,
+            "to_date": to_date.isoformat() if to_date else None,
+        }
+    elif from_date or to_date:
+        feed["date_window"] = {
+            "mode": "absolute",
+            "from_date": from_date.isoformat() if from_date else None,
+            "to_date": to_date.isoformat() if to_date else None,
+        }
     return feed
+
+
+def resolve_date_window(
+    *,
+    from_date: dt.date | None,
+    to_date: dt.date | None,
+    days: int | None,
+) -> tuple[dt.date | None, dt.date | None]:
+    if days is None:
+        return from_date, to_date
+    today = dt.date.today()
+    start = today - dt.timedelta(days=days - 1)
+    return start, today
+
+
+def resolve_sort_by(
+    *,
+    sort_by: str | None,
+    from_date: dt.date | None,
+    to_date: dt.date | None,
+) -> str:
+    if sort_by:
+        return sort_by
+    if from_date or to_date:
+        return "submittedDate"
+    return "relevance"
 
 
 def build_query(
@@ -187,14 +299,12 @@ def build_query(
         if cleaned:
             parts.append(f"cat:{cleaned}")
     if not parts:
-        raise ArxivSearchError(
-            "query construction failed: no valid search parts",
-        )
+        raise ArxivSearchError("query construction failed: no valid parts")
     return " AND ".join(parts)
 
 
 def escape_term(value: str) -> str:
-    return re.sub(r'"', r"\\\"", value.strip())
+    return re.sub(r'"', r'\\"', value.strip())
 
 
 def fetch_xml(
@@ -205,6 +315,8 @@ def fetch_xml(
     sort_by: str,
     sort_order: str,
     timeout: float,
+    retry: int,
+    retry_backoff: float,
 ) -> str:
     params = {
         "search_query": query,
@@ -219,17 +331,30 @@ def fetch_xml(
         url=url,
         headers={
             "User-Agent": (
-                "arxiv-paper-search/1.0 "
+                "arxiv-paper-search/1.1 "
                 "(https://github.com/jaichang/flutter_kiwi_nlp)"
             ),
         },
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read()
-    except urllib.error.URLError as error:
-        raise ArxivSearchError(f"arXiv request failed: {error}") from error
-    return body.decode("utf-8", errors="replace")
+
+    attempts = retry + 1
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read()
+            return body.decode("utf-8", errors="replace")
+        except (TimeoutError, urllib.error.URLError) as error:
+            last_error = error
+            if attempt >= attempts:
+                break
+            wait_seconds = retry_backoff * attempt
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
+
+    raise ArxivSearchError(
+        f"arXiv request failed after {attempts} attempt(s): {last_error}",
+    ) from last_error
 
 
 def parse_feed(
@@ -238,6 +363,9 @@ def parse_feed(
     from_date: dt.date | None,
     to_date: dt.date | None,
     include_bibtex: bool,
+    require_pdf: bool,
+    dedupe_by_title: bool,
+    max_abstract_chars: int,
 ) -> dict[str, object]:
     try:
         root = et.fromstring(xml_text)
@@ -246,10 +374,15 @@ def parse_feed(
 
     total_results = parse_total_results(root)
     entries = [
-        parse_entry(node, include_bibtex=include_bibtex)
+        parse_entry(
+            node,
+            include_bibtex=include_bibtex,
+            max_abstract_chars=max_abstract_chars,
+        )
         for node in root.findall("atom:entry", NAMESPACES)
     ]
-    filtered = [
+
+    date_filtered = [
         entry
         for entry in entries
         if matches_date_filter(
@@ -259,10 +392,28 @@ def parse_feed(
         )
     ]
 
+    pdf_filtered = [
+        entry
+        for entry in date_filtered
+        if not require_pdf or bool(entry.get("pdf_url"))
+    ]
+
+    deduped = pdf_filtered
+    dropped_by_dedupe = 0
+    if dedupe_by_title:
+        deduped, dropped_by_dedupe = dedupe_entries_by_title(pdf_filtered)
+
     return {
         "total_results": total_results,
-        "returned_results": len(filtered),
-        "entries": filtered,
+        "fetched_results": len(entries),
+        "date_filtered_results": len(date_filtered),
+        "returned_results": len(deduped),
+        "dropped_results": {
+            "date_filter": len(entries) - len(date_filtered),
+            "require_pdf": len(date_filtered) - len(pdf_filtered),
+            "dedupe_title": dropped_by_dedupe,
+        },
+        "entries": deduped,
     }
 
 
@@ -276,32 +427,38 @@ def parse_total_results(root: et.Element) -> int:
         return 0
 
 
-def parse_entry(node: et.Element, *, include_bibtex: bool) -> dict[str, object]:
+def parse_entry(
+    node: et.Element,
+    *,
+    include_bibtex: bool,
+    max_abstract_chars: int,
+) -> dict[str, object]:
     paper_url = text_or_empty(node.find("atom:id", NAMESPACES))
     arxiv_id = paper_url.rsplit("/", maxsplit=1)[-1] if paper_url else ""
-    title = collapse_whitespace(
-        text_or_empty(node.find("atom:title", NAMESPACES)),
+
+    title = collapse_whitespace(text_or_empty(node.find("atom:title", NAMESPACES)))
+    summary = truncate_text(
+        collapse_whitespace(text_or_empty(node.find("atom:summary", NAMESPACES))),
+        max_chars=max_abstract_chars,
     )
-    summary = collapse_whitespace(
-        text_or_empty(node.find("atom:summary", NAMESPACES)),
-    )
+
     authors = [
         collapse_whitespace(text_or_empty(author.find("atom:name", NAMESPACES)))
         for author in node.findall("atom:author", NAMESPACES)
     ]
+
     categories = [
         category.attrib.get("term", "")
         for category in node.findall("atom:category", NAMESPACES)
         if category.attrib.get("term")
     ]
+
     primary_category = parse_primary_category(node, categories)
-    published = parse_timestamp(
-        text_or_empty(node.find("atom:published", NAMESPACES)),
-    )
-    updated = parse_timestamp(
-        text_or_empty(node.find("atom:updated", NAMESPACES)),
-    )
-    pdf_url = find_pdf_url(node)
+    published_raw = text_or_empty(node.find("atom:published", NAMESPACES))
+    updated_raw = text_or_empty(node.find("atom:updated", NAMESPACES))
+    published = parse_timestamp(published_raw)
+    updated = parse_timestamp(updated_raw)
+
     entry: dict[str, object] = {
         "arxiv_id": arxiv_id,
         "title": title,
@@ -311,12 +468,54 @@ def parse_entry(node: et.Element, *, include_bibtex: bool) -> dict[str, object]:
         "primary_category": primary_category,
         "published": published,
         "updated": updated,
+        "published_raw": published_raw,
+        "updated_raw": updated_raw,
         "paper_url": paper_url,
-        "pdf_url": pdf_url,
+        "pdf_url": find_pdf_url(node),
+        "doi": parse_arxiv_text(node, "arxiv:doi"),
+        "journal_ref": parse_arxiv_text(node, "arxiv:journal_ref"),
+        "comment": parse_arxiv_text(node, "arxiv:comment"),
     }
+
     if include_bibtex:
         entry["bibtex"] = build_bibtex(entry)
+
     return entry
+
+
+def dedupe_entries_by_title(
+    entries: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], int]:
+    deduped: list[dict[str, object]] = []
+    seen_titles: set[str] = set()
+    dropped = 0
+
+    for entry in entries:
+        normalized = normalize_title(str(entry.get("title", "")))
+        if normalized and normalized in seen_titles:
+            dropped += 1
+            continue
+        if normalized:
+            seen_titles.add(normalized)
+        deduped.append(entry)
+
+    return deduped, dropped
+
+
+def truncate_text(value: str, *, max_chars: int) -> str:
+    if max_chars <= 0 or len(value) <= max_chars:
+        return value
+    if max_chars <= 3:
+        return value[:max_chars]
+    return value[: max_chars - 3].rstrip() + "..."
+
+
+def parse_arxiv_text(node: et.Element, path: str) -> str:
+    return collapse_whitespace(text_or_empty(node.find(path, NAMESPACES)))
+
+
+def normalize_title(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def text_or_empty(node: et.Element | None) -> str:
@@ -384,12 +583,15 @@ def build_bibtex(entry: dict[str, object]) -> str:
     title = str(entry.get("title", "")).replace("{", "\\{").replace("}", "\\}")
     year = str(entry.get("published", ""))[:4]
     paper_url = str(entry.get("paper_url", ""))
+    doi = str(entry.get("doi", ""))
+    doi_line = f"  doi={{ {doi} }},\n" if doi else ""
     return (
         f"@article{{{key},\n"
         f"  title={{ {title} }},\n"
         f"  author={{ {author_text} }},\n"
         f"  journal={{arXiv preprint arXiv:{arxiv_id}}},\n"
         f"  year={{ {year} }},\n"
+        f"{doi_line}"
         f"  url={{ {paper_url} }}\n"
         "}"
     )
@@ -403,10 +605,26 @@ def format_text_output(
     lines: list[str] = []
     query = result.get("query", "")
     total = result.get("total_results", 0)
+    fetched = result.get("fetched_results", 0)
+    date_filtered = result.get("date_filtered_results", 0)
     returned = result.get("returned_results", 0)
+
     lines.append(f"Query: {query}")
     lines.append(f"API total results: {total}")
+    lines.append(f"Fetched results: {fetched}")
+    lines.append(f"Date-filtered results: {date_filtered}")
     lines.append(f"Returned results: {returned}")
+
+    date_window = result.get("date_window")
+    if isinstance(date_window, dict):
+        lines.append(
+            f"Date window: {json.dumps(date_window, ensure_ascii=False)}",
+        )
+
+    dropped = result.get("dropped_results")
+    if isinstance(dropped, dict):
+        lines.append(f"Dropped results: {json.dumps(dropped, ensure_ascii=False)}")
+
     lines.append("")
 
     entries = result.get("entries", [])
@@ -423,16 +641,33 @@ def format_text_output(
         lines.append(f"  Published: {paper.get('published', '')}")
         lines.append(f"  Updated: {paper.get('updated', '')}")
         lines.append(f"  URL: {paper.get('paper_url', '')}")
+
         pdf = paper.get("pdf_url", "")
         if pdf:
             lines.append(f"  PDF: {pdf}")
+
+        doi = paper.get("doi", "")
+        if doi:
+            lines.append(f"  DOI: {doi}")
+
+        journal_ref = paper.get("journal_ref", "")
+        if journal_ref:
+            lines.append(f"  Journal Ref: {journal_ref}")
+
+        comment = paper.get("comment", "")
+        if comment:
+            lines.append(f"  Comment: {comment}")
+
         if include_abstract:
             lines.append(f"  Abstract: {paper.get('summary', '')}")
+
         bibtex = paper.get("bibtex", "")
         if bibtex:
             lines.append("  BibTeX:")
             lines.extend(f"    {line}" for line in str(bibtex).splitlines())
+
         lines.append("")
+
     return "\n".join(lines).strip()
 
 

@@ -135,6 +135,8 @@ def first_or_mixed(trials: list[dict[str, Any]], key: str) -> str:
     values = [trial.get(key) for trial in trials]
     first = values[0]
     if all(value == first for value in values):
+        if first is None:
+            return '-'
         return str(first)
     return 'mixed'
 
@@ -164,6 +166,44 @@ def format_ratio(
 
 def format_mean_std(mean: float, stddev: float, decimals: int = 2) -> str:
     return f'{mean:.{decimals}f} ± {stddev:.{decimals}f}'
+
+
+def safe_divide(numerator: float, denominator: float) -> float:
+    if denominator <= 0:
+        return 0.0
+    return numerator / denominator
+
+
+def has_numeric_metric(trials: list[dict[str, Any]], key: str) -> bool:
+    return any(isinstance(trial.get(key), (int, float)) for trial in trials)
+
+
+def md_escape(value: object) -> str:
+    return str(value).replace('|', '\\|').replace('\n', ' ')
+
+
+def md_shorten(text: object, max_len: int = 120) -> str:
+    raw = str(text).strip()
+    if len(raw) <= max_len:
+        return raw
+    return f'{raw[: max_len - 1]}…'
+
+
+def trial_sample_outputs(trial: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = trial.get('sample_outputs')
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def first_non_empty_sample_outputs(
+    trials: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    for trial in trials:
+        samples = trial_sample_outputs(trial)
+        if samples:
+            return samples
+    return []
 
 
 def build_report(
@@ -196,6 +236,10 @@ def build_report(
         f" | {first_or_mixed(kiwi_trials, 'sentence_count')} |"
     )
     lines.append(
+        f"| sample_count | {first_or_mixed(flutter_trials, 'sample_count')}"
+        f" | {first_or_mixed(kiwi_trials, 'sample_count')} |"
+    )
+    lines.append(
         f"| warmup_runs | {first_or_mixed(flutter_trials, 'warmup_runs')}"
         f" | {first_or_mixed(kiwi_trials, 'warmup_runs')} |"
     )
@@ -220,10 +264,64 @@ def build_report(
         f" | {first_or_mixed(kiwi_trials, 'analyze_match_options')} |"
     )
     lines.append(
+        f"| analyze_impl | {first_or_mixed(flutter_trials, 'analyze_impl')}"
+        f" | {first_or_mixed(kiwi_trials, 'analyze_impl')} |"
+    )
+    lines.append(
         f"| num_threads / num_workers | {first_or_mixed(flutter_trials, 'num_threads')}"
         f" | {first_or_mixed(kiwi_trials, 'num_workers')} |"
     )
     lines.append('')
+    flutter_impl = first_or_mixed(flutter_trials, 'analyze_impl')
+    kiwi_impl = first_or_mixed(kiwi_trials, 'analyze_impl')
+    if flutter_impl != kiwi_impl:
+        lines.append(
+            '> Caution: `analyze_impl` differs between runtimes, so this '
+            'table is not a strict apples-to-apples API-path comparison.'
+        )
+        lines.append('')
+    flutter_platform = first_or_mixed(flutter_trials, 'platform').lower()
+    kiwi_platform = first_or_mixed(kiwi_trials, 'platform').lower()
+    if (
+        flutter_platform in ('ios', 'android')
+        and flutter_platform not in kiwi_platform
+    ):
+        lines.append(
+            '> Mobile caveat: Flutter measurements are from the target mobile '
+            'runtime, while `kiwipiepy` runs on the host Python environment. '
+            'Treat this as a cross-runtime reference, not a same-device '
+            'head-to-head.'
+        )
+        lines.append('')
+
+    if has_numeric_metric(flutter_trials, 'json_overhead_ms'):
+        lines.append('## Flutter JSON Serialization/Parsing Overhead')
+        lines.append('')
+        lines.append('| Metric | flutter_kiwi_nlp (mean ± std) |')
+        lines.append('| --- | ---: |')
+
+        overhead_specs: list[tuple[str, str, int]] = [
+            ('pure_elapsed_ms', 'Pure processing elapsed (ms)', 2),
+            ('full_elapsed_ms', 'Full analyze elapsed (ms)', 2),
+            ('json_overhead_ms', 'JSON overhead elapsed (ms)', 2),
+            (
+                'json_overhead_per_analysis_ms',
+                'JSON overhead per analysis (ms)',
+                4,
+            ),
+            (
+                'json_overhead_per_token_us',
+                'JSON overhead per token (us)',
+                4,
+            ),
+            ('json_overhead_percent', 'JSON overhead ratio (%)', 2),
+        ]
+        for key, label, decimals in overhead_specs:
+            mean, stddev = summarize_metric(flutter_trials, key)
+            lines.append(
+                f'| {label} | {format_mean_std(mean, stddev, decimals=decimals)} |'
+            )
+        lines.append('')
 
     warm_metric_specs: list[tuple[str, str, bool]] = [
         ('analyses_per_sec', 'Throughput (analyses/s, higher better)', False),
@@ -257,6 +355,69 @@ def build_report(
             f'| {format_mean_std(kiwi_mean, kiwi_std)} '
             f'| {format_ratio(flutter_mean, kiwi_mean, inverse=inverse)} |'
         )
+
+    if has_numeric_metric(flutter_trials, 'pure_analyses_per_sec'):
+        flutter_pure_mean, flutter_pure_std = summarize_metric(
+            flutter_trials,
+            'pure_analyses_per_sec',
+        )
+        flutter_full_mean, flutter_full_std = summarize_metric(
+            flutter_trials,
+            'full_analyses_per_sec',
+        )
+        kiwi_api_mean, kiwi_api_std = summarize_metric(
+            kiwi_trials,
+            'analyses_per_sec',
+        )
+        boundary_loss_percent = max(
+            0.0,
+            1.0 - safe_divide(flutter_full_mean, flutter_pure_mean)
+        ) * 100.0
+
+        lines.append('')
+        lines.append('## Layered Throughput Breakdown')
+        lines.append('')
+        lines.append('| Layer | Throughput (mean ± std, analyses/s) |')
+        lines.append('| --- | ---: |')
+        lines.append(
+            f'| Flutter pure (`token_count`) '
+            f'| {format_mean_std(flutter_pure_mean, flutter_pure_std)} |'
+        )
+        lines.append(
+            f'| Flutter full (`json`) '
+            f'| {format_mean_std(flutter_full_mean, flutter_full_std)} |'
+        )
+        lines.append(
+            f'| kiwipiepy current API path (`{kiwi_impl}`) '
+            f'| {format_mean_std(kiwi_api_mean, kiwi_api_std)} |'
+        )
+        lines.append('')
+        lines.append('| Derived ratio | Value |')
+        lines.append('| --- | ---: |')
+        lines.append(
+            '| Flutter pure / kiwi '
+            f'| {format_ratio(flutter_pure_mean, kiwi_api_mean)} |'
+        )
+        lines.append(
+            '| Flutter full / kiwi '
+            f'| {format_ratio(flutter_full_mean, kiwi_api_mean)} |'
+        )
+        lines.append(
+            '| Flutter boundary loss (full vs pure) '
+            f'| {boundary_loss_percent:.2f}% |'
+        )
+        lines.append('')
+
+        if (
+            flutter_pure_mean >= kiwi_api_mean
+            and flutter_full_mean < kiwi_api_mean
+        ):
+            lines.append(
+                '> Reading: Flutter core path is competitive, but boundary '
+                'materialization/parsing overhead reduces end-to-end API '
+                'throughput.'
+            )
+            lines.append('')
 
     flutter_init_median, flutter_init_p95 = summarize_median_p95(
         flutter_trials,
@@ -329,6 +490,51 @@ def build_report(
             f" | {safe_float(flutter_trial, 'analyses_per_sec'):.2f}"
             f" | {safe_float(kiwi_trial, 'analyses_per_sec'):.2f} |"
         )
+
+    flutter_samples = first_non_empty_sample_outputs(flutter_trials)
+    kiwi_samples = first_non_empty_sample_outputs(kiwi_trials)
+    if flutter_samples or kiwi_samples:
+        sample_rows = max(len(flutter_samples), len(kiwi_samples))
+        lines.append('')
+        lines.append('## Sample POS Output Comparison (Top1)')
+        lines.append('')
+        lines.append(
+            '| # | Sentence | flutter_kiwi_nlp top1 | '
+            'kiwipiepy top1 | Match |'
+        )
+        lines.append('| ---: | --- | --- | --- | --- |')
+        for index in range(sample_rows):
+            flutter_sample = (
+                flutter_samples[index]
+                if index < len(flutter_samples)
+                else {}
+            )
+            kiwi_sample = kiwi_samples[index] if index < len(kiwi_samples) else {}
+            sentence = str(
+                flutter_sample.get('sentence') or kiwi_sample.get('sentence') or ''
+            )
+            flutter_top1 = str(
+                flutter_sample.get('top1_text')
+                or flutter_sample.get('top1Text')
+                or flutter_sample.get('appTop1Text')
+                or '(결과 없음)'
+            )
+            kiwi_top1 = str(
+                kiwi_sample.get('top1_text')
+                or kiwi_sample.get('top1Text')
+                or '(없음)'
+            )
+            if flutter_top1 == '(결과 없음)' or kiwi_top1 == '(없음)':
+                match = 'n/a'
+            else:
+                match = 'same' if flutter_top1 == kiwi_top1 else 'diff'
+            lines.append(
+                f'| {index + 1} '
+                f'| {md_escape(md_shorten(sentence))} '
+                f'| {md_escape(md_shorten(flutter_top1))} '
+                f'| {md_escape(md_shorten(kiwi_top1))} '
+                f'| {match} |'
+            )
 
     lines.append('')
     lines.append(

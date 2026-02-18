@@ -319,6 +319,23 @@ class KiwiAnalyzer {
     return KiwiAnalyzeResult(candidates: candidates);
   }
 
+  /// Analyzes [text] and returns the first-candidate token count.
+  ///
+  /// This keeps API parity with native backends. On web, it delegates to
+  /// [analyze] and counts tokens from the first candidate.
+  ///
+  /// Throws a [KiwiException] if analysis fails or if this analyzer is closed.
+  Future<int> analyzeTokenCount(
+    String text, {
+    KiwiAnalyzeOptions options = const KiwiAnalyzeOptions(),
+  }) async {
+    final KiwiAnalyzeResult result = await analyze(text, options: options);
+    if (result.candidates.isEmpty) {
+      return 0;
+    }
+    return result.candidates.first.tokens.length;
+  }
+
   /// Adds a user dictionary entry to this analyzer instance.
   ///
   /// The [word] is the surface form to register.

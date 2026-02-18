@@ -31,6 +31,15 @@ FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_analyze_json(
     int32_t top_n,
     int32_t match_options);
 
+// Runs analysis and returns the token count of the first candidate.
+// Returns 0 on success and writes to out_token_count.
+FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* text,
+    int32_t top_n,
+    int32_t match_options,
+    int32_t* out_token_count);
+
 // Adds a user word to the in-memory dictionary.
 FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_add_user_word(
     flutter_kiwi_ffi_handle_t* handle,
