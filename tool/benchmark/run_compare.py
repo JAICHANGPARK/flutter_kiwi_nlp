@@ -7,13 +7,15 @@ import argparse
 import base64
 import json
 import os
-import select
+import queue
 import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+from typing import TextIO
 
 
 def parse_args() -> argparse.Namespace:
@@ -185,6 +187,15 @@ def run_flutter_benchmark(
         bufsize=1,
     )
 
+    output_queue: queue.Queue[str | None] = queue.Queue()
+
+    def _pump_stdout(stream: TextIO) -> None:
+        try:
+            for output_line in stream:
+                output_queue.put(output_line)
+        finally:
+            output_queue.put(None)
+
     payload: dict[str, object] | None = None
     chunk_total: int | None = None
     chunk_parts: dict[int, str] = {}
@@ -350,6 +361,14 @@ def run_flutter_benchmark(
                 text=True,
             )
         assert process.stdout is not None
+        stdout_reader = threading.Thread(
+            target=_pump_stdout,
+            args=(process.stdout,),
+            daemon=True,
+        )
+        stdout_reader.start()
+
+        stdout_closed = False
         while True:
             payload = try_load_output_payload()
             if payload is not None:
@@ -363,17 +382,22 @@ def run_flutter_benchmark(
                 if payload is not None:
                     break
 
-            readable, _, _ = select.select([process.stdout], [], [], 0.25)
-            if readable:
-                line = process.stdout.readline()
-                if not line:
-                    if process.poll() is not None:
-                        break
+            has_queue_item = False
+            queued_line: str | None = None
+            try:
+                queued_line = output_queue.get(timeout=0.25)
+                has_queue_item = True
+            except queue.Empty:
+                pass
+
+            if has_queue_item:
+                if queued_line is None:
+                    stdout_closed = True
                 else:
-                    print(line, end='')
-                    marker_index = line.find(marker)
+                    print(queued_line, end='')
+                    marker_index = queued_line.find(marker)
                     if marker_index != -1:
-                        raw_json = line[marker_index + len(marker) :].strip()
+                        raw_json = queued_line[marker_index + len(marker) :].strip()
                         try:
                             parsed = json.loads(raw_json)
                         except json.JSONDecodeError:
@@ -389,12 +413,12 @@ def run_flutter_benchmark(
                             payload = parsed
                             break
 
-                    parsed_chunk = try_parse_chunk_line(line)
+                    parsed_chunk = try_parse_chunk_line(queued_line)
                     if parsed_chunk is not None:
                         payload = parsed_chunk
                         break
 
-            if process.poll() is not None:
+            if process.poll() is not None and stdout_closed:
                 break
 
             if time.monotonic() > deadline:
