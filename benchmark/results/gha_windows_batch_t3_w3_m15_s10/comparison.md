@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | runtime | flutter_kiwi_nlp | kiwipiepy |
 | platform | windows | Windows-10-10.0.26100-SP0 |
-| generated_at_utc (first trial) | 2026-02-18T08:33:49.750026Z | 2026-02-18T08:33:52Z |
+| generated_at_utc (first trial) | 2026-02-18T08:54:40.645898Z | 2026-02-18T08:54:43Z |
 | trials | 3 | 3 |
 | sentence_count | 40 | 40 |
 | sample_count | 10 | 10 |
@@ -26,60 +26,60 @@
 
 | Metric | flutter_kiwi_nlp (mean ± std) |
 | --- | ---: |
-| Pure processing elapsed (ms) | 158.47 ± 15.42 |
-| Full analyze elapsed (ms) | 199.43 ± 25.44 |
-| JSON overhead elapsed (ms) | 40.96 ± 15.62 |
-| JSON overhead per analysis (ms) | 0.0683 ± 0.0260 |
-| JSON overhead per token (us) | 4.2334 ± 1.6143 |
-| JSON overhead ratio (%) | 20.24 ± 5.91 |
+| Pure processing elapsed (ms) | 129.81 ± 0.99 |
+| Full analyze elapsed (ms) | 168.87 ± 2.29 |
+| JSON overhead elapsed (ms) | 39.06 ± 3.24 |
+| JSON overhead per analysis (ms) | 0.0651 ± 0.0054 |
+| JSON overhead per token (us) | 4.0374 ± 0.3345 |
+| JSON overhead ratio (%) | 23.12 ± 1.61 |
 
 ## Warm Path Comparison (Primary, Init Excluded)
 
 | Metric | flutter_kiwi_nlp (mean ± std) | kiwipiepy (mean ± std) | Ratio (Flutter mean / Kiwi mean) |
 | --- | ---: | ---: | ---: |
-| Throughput (analyses/s, higher better) | 3810.96 ± 382.31 | 2858.93 ± 15.36 | 1.33x (faster) |
-| Throughput (chars/s, higher better) | 129191.43 ± 12960.46 | 96917.85 ± 520.62 | 1.33x (faster) |
-| Throughput (tokens/s, higher better) | 61451.67 ± 6164.82 | 45957.36 ± 246.87 | 1.34x (faster) |
-| Avg warm latency (ms, lower better) | 0.26 ± 0.03 | 0.35 ± 0.00 | 0.76x (faster) |
-| Avg warm token latency (us/token, lower better) | 16.38 ± 1.59 | 21.76 ± 0.12 | 0.75x (faster) |
+| Throughput (analyses/s, higher better) | 4622.39 ± 35.36 | 2987.51 ± 23.77 | 1.55x (faster) |
+| Throughput (chars/s, higher better) | 156699.06 ± 1198.59 | 101276.55 ± 805.78 | 1.55x (faster) |
+| Throughput (tokens/s, higher better) | 74536.06 ± 570.12 | 48024.20 ± 382.09 | 1.55x (faster) |
+| Avg warm latency (ms, lower better) | 0.22 ± 0.00 | 0.33 ± 0.00 | 0.65x (faster) |
+| Avg warm token latency (us/token, lower better) | 13.42 ± 0.10 | 20.82 ± 0.17 | 0.64x (faster) |
 
 ## Layered Throughput Breakdown
 
 | Layer | Throughput (mean ± std, analyses/s) |
 | --- | ---: |
-| Flutter pure (`token_count`) | 3810.96 ± 382.31 |
-| Flutter full (`json`) | 3039.36 ± 361.88 |
-| kiwipiepy current API path (`analyze`) | 2858.93 ± 15.36 |
+| Flutter pure (`token_count`) | 4622.39 ± 35.36 |
+| Flutter full (`json`) | 3553.48 ± 48.51 |
+| kiwipiepy current API path (`analyze`) | 2987.51 ± 23.77 |
 
 | Derived ratio | Value |
 | --- | ---: |
-| Flutter pure / kiwi | 1.33x (faster) |
-| Flutter full / kiwi | 1.06x (faster) |
-| Flutter boundary loss (full vs pure) | 20.25% |
+| Flutter pure / kiwi | 1.55x (faster) |
+| Flutter full / kiwi | 1.19x (faster) |
+| Flutter boundary loss (full vs pure) | 23.12% |
 
 
 ## Cold Start Comparison (Reported Separately)
 
 | Metric | flutter_kiwi_nlp | kiwipiepy | Ratio |
 | --- | ---: | ---: | ---: |
-| Init time (ms, lower better) | median 2479.52, p95 3107.34 | median 914.22, p95 1073.00 | 2.71x (slower) |
+| Init time (ms, lower better) | median 2281.46, p95 2963.99 | median 898.53, p95 1077.95 | 2.54x (slower) |
 
 ## Session-Length Effective Throughput (Init Included)
 
 | Session analyses | flutter_kiwi_nlp effective analyses/s (mean ± std) | kiwipiepy effective analyses/s (mean ± std) | Ratio (Flutter mean / Kiwi mean) |
 | ---: | ---: | ---: | ---: |
-| 1 | 0.38 ± 0.05 | 1.04 ± 0.11 | 0.36x (slower) |
-| 10 | 3.77 ± 0.55 | 10.36 ± 1.06 | 0.36x (slower) |
-| 100 | 37.38 ± 5.39 | 100.28 ± 9.94 | 0.37x (slower) |
-| 1000 | 343.36 ± 47.86 | 761.31 ± 58.35 | 0.45x (slower) |
+| 1 | 0.40 ± 0.06 | 1.07 ± 0.14 | 0.38x (slower) |
+| 10 | 4.02 ± 0.64 | 10.66 ± 1.41 | 0.38x (slower) |
+| 100 | 39.89 ± 6.26 | 103.23 ± 13.30 | 0.39x (slower) |
+| 1000 | 369.74 ± 54.27 | 786.02 ± 79.84 | 0.47x (slower) |
 
 ## Per-Trial Raw Snapshot
 
 | Trial | Flutter init (ms) | Kiwi init (ms) | Flutter warm analyses/s | Kiwi warm analyses/s |
 | ---: | ---: | ---: | ---: | ---: |
-| 1 | 3177.10 | 1090.64 | 3484.12 | 2854.79 |
-| 2 | 2412.07 | 914.22 | 4231.37 | 2875.94 |
-| 3 | 2479.52 | 902.57 | 3717.38 | 2846.07 |
+| 1 | 3039.83 | 1097.88 | 4617.12 | 2960.54 |
+| 2 | 2281.46 | 898.53 | 4589.96 | 2996.57 |
+| 3 | 2272.80 | 843.76 | 4660.09 | 3005.42 |
 
 ## Sample POS Output Comparison (Top1)
 

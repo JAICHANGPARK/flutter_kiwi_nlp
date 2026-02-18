@@ -5,8 +5,8 @@
 | Field | flutter_kiwi_nlp | kiwipiepy |
 | --- | --- | --- |
 | runtime | flutter_kiwi_nlp | kiwipiepy |
-| platform | windows | Windows-10-10.0.26100-SP0 |
-| generated_at_utc (first trial) | 2026-02-18T08:56:41.633596Z | 2026-02-18T08:56:46Z |
+| platform | linux | Linux-6.14.0-1017-azure-x86_64-with-glibc2.39 |
+| generated_at_utc (first trial) | 2026-02-18T08:52:14.680151Z | 2026-02-18T08:52:16Z |
 | trials | 3 | 3 |
 | sentence_count | 40 | 40 |
 | sample_count | 10 | 10 |
@@ -26,60 +26,60 @@
 
 | Metric | flutter_kiwi_nlp (mean ± std) |
 | --- | ---: |
-| Pure processing elapsed (ms) | 312.30 ± 0.86 |
-| Full analyze elapsed (ms) | 371.20 ± 6.06 |
-| JSON overhead elapsed (ms) | 58.90 ± 5.65 |
-| JSON overhead per analysis (ms) | 0.0982 ± 0.0094 |
-| JSON overhead per token (us) | 6.0883 ± 0.5843 |
-| JSON overhead ratio (%) | 15.85 ± 1.26 |
+| Pure processing elapsed (ms) | 288.05 ± 10.45 |
+| Full analyze elapsed (ms) | 334.76 ± 16.67 |
+| JSON overhead elapsed (ms) | 46.71 ± 6.82 |
+| JSON overhead per analysis (ms) | 0.0779 ± 0.0114 |
+| JSON overhead per token (us) | 4.8281 ± 0.7054 |
+| JSON overhead ratio (%) | 13.91 ± 1.42 |
 
 ## Warm Path Comparison (Primary, Init Excluded)
 
 | Metric | flutter_kiwi_nlp (mean ± std) | kiwipiepy (mean ± std) | Ratio (Flutter mean / Kiwi mean) |
 | --- | ---: | ---: | ---: |
-| Throughput (analyses/s, higher better) | 1921.24 ± 5.33 | 3018.30 ± 67.70 | 0.64x (slower) |
-| Throughput (chars/s, higher better) | 65130.09 ± 180.66 | 102320.34 ± 2294.95 | 0.64x (slower) |
-| Throughput (tokens/s, higher better) | 30980.02 ± 85.93 | 48519.16 ± 1088.24 | 0.64x (slower) |
-| Avg warm latency (ms, lower better) | 0.52 ± 0.00 | 0.33 ± 0.01 | 1.57x (slower) |
-| Avg warm token latency (us/token, lower better) | 32.28 ± 0.09 | 20.62 ± 0.47 | 1.57x (slower) |
+| Throughput (analyses/s, higher better) | 2084.75 ± 74.15 | 3244.11 ± 48.99 | 0.64x (slower) |
+| Throughput (chars/s, higher better) | 70673.19 ± 2513.85 | 109975.17 ± 1660.75 | 0.64x (slower) |
+| Throughput (tokens/s, higher better) | 33616.67 ± 1195.75 | 52148.99 ± 787.51 | 0.64x (slower) |
+| Avg warm latency (ms, lower better) | 0.48 ± 0.02 | 0.31 ± 0.00 | 1.56x (slower) |
+| Avg warm token latency (us/token, lower better) | 29.77 ± 1.08 | 19.18 ± 0.29 | 1.55x (slower) |
 
 ## Layered Throughput Breakdown
 
 | Layer | Throughput (mean ± std, analyses/s) |
 | --- | ---: |
-| Flutter pure (`token_count`) | 1921.24 ± 5.33 |
-| Flutter full (`json`) | 1616.65 ± 26.15 |
-| kiwipiepy current API path (`analyze`) | 3018.30 ± 67.70 |
+| Flutter pure (`token_count`) | 2084.75 ± 74.15 |
+| Flutter full (`json`) | 1795.23 ± 88.10 |
+| kiwipiepy current API path (`analyze`) | 3244.11 ± 48.99 |
 
 | Derived ratio | Value |
 | --- | ---: |
 | Flutter pure / kiwi | 0.64x (slower) |
-| Flutter full / kiwi | 0.54x (slower) |
-| Flutter boundary loss (full vs pure) | 15.85% |
+| Flutter full / kiwi | 0.55x (slower) |
+| Flutter boundary loss (full vs pure) | 13.89% |
 
 
 ## Cold Start Comparison (Reported Separately)
 
 | Metric | flutter_kiwi_nlp | kiwipiepy | Ratio |
 | --- | ---: | ---: | ---: |
-| Init time (ms, lower better) | median 2262.13, p95 5549.20 | median 846.28, p95 2120.41 | 2.67x (slower) |
+| Init time (ms, lower better) | median 1706.02, p95 1837.15 | median 634.76, p95 641.99 | 2.69x (slower) |
 
 ## Session-Length Effective Throughput (Init Included)
 
 | Session analyses | flutter_kiwi_nlp effective analyses/s (mean ± std) | kiwipiepy effective analyses/s (mean ± std) | Ratio (Flutter mean / Kiwi mean) |
 | ---: | ---: | ---: | ---: |
-| 1 | 0.35 ± 0.16 | 0.94 ± 0.43 | 0.37x (slower) |
-| 10 | 3.51 ± 1.58 | 9.36 ± 4.28 | 0.38x (slower) |
-| 100 | 34.46 ± 15.33 | 90.68 ± 40.79 | 0.38x (slower) |
-| 1000 | 291.84 ± 118.18 | 695.50 ± 267.60 | 0.42x (slower) |
+| 1 | 0.57 ± 0.03 | 1.57 ± 0.02 | 0.36x (slower) |
+| 10 | 5.70 ± 0.27 | 15.65 ± 0.16 | 0.36x (slower) |
+| 100 | 55.60 ± 2.54 | 150.01 ± 1.36 | 0.37x (slower) |
+| 1000 | 448.12 ± 15.12 | 1059.20 ± 2.88 | 0.42x (slower) |
 
 ## Per-Trial Raw Snapshot
 
 | Trial | Flutter init (ms) | Kiwi init (ms) | Flutter warm analyses/s | Kiwi warm analyses/s |
 | ---: | ---: | ---: | ---: | ---: |
-| 1 | 5914.43 | 2261.98 | 1917.93 | 3073.86 |
-| 2 | 2252.35 | 837.72 | 1927.39 | 2942.90 |
-| 3 | 2262.13 | 846.28 | 1918.41 | 3038.14 |
+| 1 | 1851.72 | 642.79 | 2136.71 | 3287.26 |
+| 2 | 1706.02 | 634.76 | 1999.83 | 3254.21 |
+| 3 | 1701.86 | 629.89 | 2117.72 | 3190.85 |
 
 ## Sample POS Output Comparison (Top1)
 
