@@ -33,7 +33,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: desktop-benchmark-${{ github.ref }}
@@ -151,3 +151,51 @@ jobs:
             echo "comparison.md not found: ${report_path}" \
               >> "${GITHUB_STEP_SUMMARY}"
           fi
+
+  persist-results:
+    name: Persist benchmark results
+    needs: benchmark
+    if: ${{ needs.benchmark.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Download benchmark artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-*
+          path: benchmark/_artifacts
+
+      - name: Copy artifacts into benchmark/results
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for artifact_dir in benchmark/_artifacts/benchmark-*; do
+            artifact_name="$(basename "${artifact_dir}")"
+            suffix="${artifact_name#benchmark-}"
+            platform="${suffix%-*}"
+            execution_mode="${suffix##*-}"
+            destination="benchmark/results/gha_${platform}_${execution_mode}_t${{ inputs.trials }}_w${{ inputs.warmup_runs }}_m${{ inputs.measure_runs }}_s${{ inputs.sample_count }}"
+            rm -rf "${destination}"
+            mkdir -p "${destination}"
+            cp -a "${artifact_dir}"/. "${destination}"/
+          done
+
+      - name: Commit and push benchmark results
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add benchmark/results
+          if git diff --cached --quiet; then
+            echo "No benchmark result changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(benchmark): persist desktop benchmark results (run ${GITHUB_RUN_ID})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
