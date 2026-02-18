@@ -18,6 +18,19 @@ from pathlib import Path
 from typing import TextIO
 
 
+def write_log_line(line: str) -> None:
+    """Write a log line without failing on Windows console encodings."""
+    encoding = sys.stdout.encoding or 'utf-8'
+    try:
+        sys.stdout.write(line)
+    except UnicodeEncodeError:
+        safe_line = line.encode(encoding, errors='replace').decode(
+            encoding, errors='replace'
+        )
+        sys.stdout.write(safe_line)
+    sys.stdout.flush()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Run both benchmarks and generate markdown comparison.'
@@ -396,7 +409,7 @@ def run_flutter_benchmark(
                 if queued_line is None:
                     stdout_closed = True
                 else:
-                    print(queued_line, end='')
+                    write_log_line(queued_line)
                     marker_index = queued_line.find(marker)
                     if marker_index != -1:
                         raw_json = queued_line[marker_index + len(marker) :].strip()
