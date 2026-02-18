@@ -46,14 +46,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        execution_mode:
+          - single
+          - batch
         include:
           - os: ubuntu-latest
             target: linux
           - os: windows-latest
             target: windows
-        execution_mode:
-          - single
-          - batch
     env:
       OUT_DIR: benchmark/results/gha_${{ matrix.target }}_${{ matrix.execution_mode }}_t${{ inputs.trials }}_w${{ inputs.warmup_runs }}_m${{ inputs.measure_runs }}_s${{ inputs.sample_count }}
       PYTHONUNBUFFERED: '1'
