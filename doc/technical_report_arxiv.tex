@@ -1,7 +1,6 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
 \usepackage{lmodern}
 \usepackage{microtype}
 \usepackage{hyperref}
@@ -67,13 +66,18 @@ analysis engine and model format used here.
 The implementation is explicitly aligned with on-device AI requirements:
 local inference execution, reduced text egress by default, predictable latency
 without per-request network dependence, and operational fallback controls for
-model provisioning. Empirically, repeated benchmark trials show that Flutter
-warm-path throughput in this revision is higher than the Python-native baseline:
+model provisioning. Empirically, repeated benchmark trials show a
+\textit{warm-path throughput reversal} (steady-state path, initialization
+excluded): Flutter warm throughput can exceed the Python-native baseline:
 3.12x on desktop, 3.87x on iOS simulator (debug), and 1.52x on Android emulator
-(release). The updated benchmark pipeline also adds boundary-decomposed
+(release). Added Linux/Windows CI rows show clear execution-mode sensitivity:
+single mode is 0.64x of Python throughput on both OSes, while batch mode is
+1.54--1.55x faster than Python on the same runners. The updated benchmark
+pipeline also adds boundary-decomposed
 measurements (pure processing vs full JSON path), quantifying
-serialization/parsing overhead at 19.95--47.93\% depending on runtime profile.
-At the same time, cold-start initialization and short-session
+serialization/parsing overhead at 13.89--47.93\% depending on runtime profile.
+This warm-path reversal does not imply end-to-end session superiority:
+cold-start initialization and short-session
 effective-throughput remain weaker than the Python baseline on all measured
 platforms. Cross-runtime linguistic agreement remains close on
 gold corpora
@@ -126,8 +130,10 @@ This paper is positioned as a \textbf{systems/resource} contribution rather than
 an algorithmic NLP paper. Its primary value is integration engineering:
 cross-runtime API unification, deterministic fallback policy, reproducible
 benchmark protocol, and deployable build/runtime controls for Flutter
-applications. It does not claim a new morphological decoding algorithm or a new
-Korean language model architecture.
+applications. This revision also contributes glass-box performance profiling via
+boundary-decomposed metrics (pure vs full path) and cross-OS CI benchmark rows
+that expose execution-mode sensitivity. It does not claim a new morphological
+decoding algorithm or a new Korean language model architecture.
 
 \section{Related Work}
 This revision expands the related-work coverage to include core Transformer
@@ -1274,6 +1280,10 @@ Current report scope focuses on native/mobile throughput and correctness; it
 does not yet include sustained web TTI measurements under controlled cache and
 network conditions. This is treated as explicit future work in
 Section~\ref{sec:future-work}.
+For reproducible Web TTI reporting in the next revision, we will publish
+cold-cache and warm-cache TTI distributions (p50/p95) under explicit network
+profiles, together with module/WASM/model artifact sizes and cache-hit/miss
+annotations.
 
 \subsection{Web Build Modes}
 The web implementation supports two construction modes:
@@ -1465,7 +1475,7 @@ Item & Value \\
 \midrule
 \endhead
 Report snapshot date & February 18, 2026 \\
-Repository commit base & \texttt{f70688460d7de740f73a2a707e2773cfb334f5e0} \\
+Repository commit base & \texttt{2ab94d2b3fa6a941c8a339547e4e1797695ab06d} \\
 Flutter SDK & \texttt{3.41.1} (framework revision \texttt{582a0e7c55}) \\
 Dart SDK & \texttt{3.11.0} \\
 Python runtime & \texttt{3.14.3} \\
@@ -1477,6 +1487,8 @@ Host memory & 16 GiB (\texttt{17179869184} bytes) \\
 Corpus hash (SHA-256) & \path{0fed28f4601cd577de8ad0f35fbe5bb1827e71931d3c8b19714a9976a12f3c9f} \\
 Desktop benchmark shape & \texttt{trials=3, warmup\_runs=3, measure\_runs=15, top\_n=1} \\
 Desktop analyze impl & Flutter: \texttt{json} (primary), Kiwi: \texttt{analyze} \\
+Linux/Windows CI runner shape & \texttt{trials=3, warmup\_runs=3, measure\_runs=15, top\_n=1} \\
+Linux/Windows CI analyze impl & Flutter: \texttt{token\_count} (primary), Kiwi: \texttt{analyze} \\
 \bottomrule
 \end{longtable}
 
@@ -1489,10 +1501,14 @@ From the benchmark trial sets included in this report (February 18, 2026):
   \texttt{n=3}, \texttt{warmup=3}, \texttt{measure=15}).
   \item Mobile platform B: Android 16 emulator (API 36, release,
   \texttt{n=3}, \texttt{warmup=3}, \texttt{measure=15}).
+  \item Desktop CI platform A: Linux GitHub runner
+  (\texttt{n=3}, \texttt{warmup=3}, \texttt{measure=15}).
+  \item Desktop CI platform B: Windows GitHub runner
+  (\texttt{n=3}, \texttt{warmup=3}, \texttt{measure=15}).
   \item Corpus sentences: 40.
   \item Sample POS rows emitted per runtime: \texttt{sample\_count = 10}.
   \item Total measured analyses per trial:
-  desktop/iOS/Android all use \texttt{15 * 40 = 600}.
+  all reported rows use \texttt{15 * 40 = 600}.
   \item \texttt{top\_n}: 1.
   \item Desktop primary analyze path:
   Flutter \texttt{json}, Kiwi \texttt{analyze}
@@ -1742,6 +1758,49 @@ Avg token latency (us/token, lower better) & 16.62 ± 3.96 & 24.47 ± 0.68 & 0.6
 \bottomrule
 \end{longtable}
 
+\subsection{Additional Desktop CI Measurements (Linux/Windows, n=3)}
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{2pt}
+\begin{longtable}{@{}L{0.18\linewidth}L{0.13\linewidth}L{0.13\linewidth}L{0.10\linewidth}L{0.13\linewidth}L{0.13\linewidth}L{0.10\linewidth}@{}}
+\caption{Linux/Windows GitHub runner warm-path summary (single vs batch, mean ± stddev)}\label{tab:benchmark-desktop-ci-warm}\\
+\toprule
+Platform/Mode & Flutter APS & Kiwi APS & Ratio & Flutter Lat (ms) & Kiwi Lat (ms) & Ratio \\
+\midrule
+\endfirsthead
+\toprule
+Platform/Mode & Flutter APS & Kiwi APS & Ratio & Flutter Lat (ms) & Kiwi Lat (ms) & Ratio \\
+\midrule
+\endhead
+Linux/single & 2084.75 ± 74.15 & 3244.11 ± 48.99 & 0.64x & 0.48 ± 0.02 & 0.31 ± 0.00 & 1.56x slower \\
+Linux/batch & 5129.13 ± 56.53 & 3321.86 ± 6.59 & 1.54x & 0.19 ± 0.00 & 0.30 ± 0.00 & 0.65x faster \\
+Windows/single & 1921.24 ± 5.33 & 3018.30 ± 67.70 & 0.64x & 0.52 ± 0.00 & 0.33 ± 0.01 & 1.57x slower \\
+Windows/batch & 4622.39 ± 35.36 & 2987.51 ± 23.77 & 1.55x & 0.22 ± 0.00 & 0.33 ± 0.00 & 0.65x faster \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{2pt}
+\begin{longtable}{@{}L{0.20\linewidth}L{0.17\linewidth}L{0.19\linewidth}L{0.18\linewidth}L{0.18\linewidth}@{}}
+\caption{Linux/Windows GitHub runner boundary/cold/session summary}\label{tab:benchmark-desktop-ci-overview}\\
+\toprule
+Platform/Mode & Boundary Loss & Ovh./analysis (ms) & Init Ratio (median) & N=1000 Eff. Ratio \\
+\midrule
+\endfirsthead
+\toprule
+Platform/Mode & Boundary Loss & Ovh./analysis (ms) & Init Ratio (median) & N=1000 Eff. Ratio \\
+\midrule
+\endhead
+Linux/single & 13.89\% & 0.0779 ± 0.0114 & 2.69x slower & 0.42x \\
+Linux/batch & 22.22\% & 0.0557 ± 0.0025 & 2.71x slower & 0.49x \\
+Windows/single & 15.85\% & 0.0982 ± 0.0094 & 2.67x slower & 0.42x \\
+Windows/batch & 23.12\% & 0.0651 ± 0.0054 & 2.54x slower & 0.47x \\
+\bottomrule
+\end{longtable}
+\endgroup
+
 \subsection{Session-Length Effective Throughput (Init Included)}
 Table~\ref{tab:benchmark-session-effective} reports expected analyses/sec when a
 session runs for fixed analysis counts (\texttt{N} in \{1, 10, 100, 1000\}),
@@ -1930,12 +1989,12 @@ Trial & Flutter init (ms) & Kiwi init (ms) & Flutter analyses/s & Kiwi analyses/
 \subsection{Detailed Interpretation (Honest Reading)}
 Across desktop and mobile trial sets, warm-path throughput and latency are
 consistently stable, and warm per-call latency remains sub-millisecond in these
-configurations (roughly 0.1--0.4 ms). This matches the practical impression
+configurations (roughly 0.1--0.6 ms). This matches the practical impression
 that repeated in-app analysis is responsive after initialization. At the same
 time, repeated measurements still show slower init on the Flutter path relative
 to the Python reference runtime, with magnitude varying by environment.
 In the latest run profile, warm-path throughput itself reverses direction and
-is now higher on Flutter across all reported environments:
+is higher on Flutter across the macOS+iOS+Android baseline rows:
 desktop \(3.12\times\), iOS simulator \(3.87\times\), and Android emulator
 \(1.52\times\) versus \texttt{kiwipiepy}. Compared with the prior table values
 in this report, Flutter warm analyses/s increased sharply
@@ -1945,11 +2004,20 @@ Android: \(2214.79 \rightarrow 3865.71\), +74.54\%).
 However, session-length effective throughput remains lower for short sessions
 because cold-start cost is still front-loaded on the Flutter path.
 
-New boundary-decomposed instrumentation (Table~\ref{tab:benchmark-boundary})
-adds direct evidence for where overhead accumulates. Flutter boundary loss
-(full JSON path vs pure processing path) is 36.85\% on desktop, 47.93\% on iOS
-simulator, and 19.95\% on Android emulator, with per-analysis overhead of
-roughly 0.05--0.09 ms.
+New desktop CI rows on Linux/Windows add an additional signal: execution mode
+is a first-order factor. In both OSes, single mode shows lower warm throughput
+than Python (\(\approx 0.64\times\)), while batch mode flips the direction and
+exceeds Python (\(\approx 1.54\)--\(1.55\times\)). This pattern is consistent
+with reduced per-call boundary overhead under batch dispatch, while init-heavy
+short sessions remain disadvantaged (Linux/Windows \(N=1000\) effective ratio
+still around \(0.42\)--\(0.49\times\)).
+
+New boundary-decomposed instrumentation
+(Tables~\ref{tab:benchmark-boundary} and
+\ref{tab:benchmark-desktop-ci-overview}) adds direct evidence for where
+overhead accumulates. Flutter boundary loss (full JSON path vs pure processing
+path) spans 13.89--47.93\% across the measured rows, with per-analysis overhead
+roughly 0.05--0.10 ms.
 This also bounds expected gains from JSON-path removal alone: eliminating
 serialization would likely recover a meaningful fraction of warm-path overhead,
 but not necessarily close the entire cross-runtime gap by itself.
@@ -1973,8 +2041,8 @@ Based on code inspection and payload values, the most likely contributors are:
   \item \textbf{Residual cross-runtime semantic gap (evidence-based):}
   this benchmark now passes explicit build and match bitmasks to both runtimes,
   reducing prior configuration mismatch risk. However, output token totals still
-  differ (Flutter 9660 vs Python 9645), indicating backend-wrapper semantic
-  differences even under aligned knobs.
+  differ in the current macOS baseline row (Flutter 9660 vs Python 9645),
+  indicating backend-wrapper semantic differences even under aligned knobs.
 
   \item \textbf{Worker/thread auto mode mismatch (evidence-based):}
   both runtimes use auto settings (\texttt{-1}) for thread/worker counts, but
@@ -1989,8 +2057,10 @@ Based on code inspection and payload values, the most likely contributors are:
 Current benchmark limitations that should be stated explicitly:
 \begin{itemize}[leftmargin=1.5em]
   \item Trial counts are improved but still modest for strong inference
-  (desktop/iOS/Android all \texttt{n=3}).
+  (all reported rows use \texttt{n=3}).
   \item No explicit CPU pinning or thermal-state control.
+  \item Linux/Windows desktop CI rows were collected on shared GitHub-hosted
+  runners, so VM scheduling variability can affect jitter and tail latency.
   \item Bitmask parity is enforced, but internal backend semantics can still differ.
   \item Init metric combines multiple concerns (library load, model resolution,
   analyzer construction) rather than isolated micro-phases.
@@ -2004,6 +2074,8 @@ Current benchmark limitations that should be stated explicitly:
   \item Android measurements were collected on emulator, not on real devices.
   \item Android emulator guest was configured with 4 vCPUs and 2 GiB RAM, which
   can amplify startup variance and may not represent flagship physical devices.
+  \item Physical-device benchmark commands are provided in Appendix C, but this
+  revision does not yet include executed iOS/Android physical-device rows.
   \item For mobile rows, \texttt{kiwipiepy} values come from host macOS runtime;
   therefore cross-runtime ratios on mobile rows should be interpreted as
   engineering reference, not strict same-device head-to-head evidence.
@@ -2420,7 +2492,7 @@ next quality multiplier for this plugin class.
 \begin{itemize}[leftmargin=1.5em]
   \item \textbf{Could zero-copy or binary bridge further improve throughput and close effective-session gaps?}
   It is a promising direction and is explicitly planned. Current boundary
-  measurements indicate JSON-path overhead around 19.95--47.93\% on warm paths; this
+  measurements indicate JSON-path overhead around 13.89--47.93\% on warm paths; this
   suggests meaningful gains, but also implies that non-JSON residual costs may
   still remain after migration.
   \item \textbf{Does Android init include asset extraction from APK?}
@@ -2463,9 +2535,12 @@ next quality multiplier for this plugin class.
   \end{itemize}
   \item \textbf{Benchmark external validity:} add release/profile measurements
   on physical iOS and Android devices, with repeated runs under thermal-state
-  controls and explicit startup-path annotations (asset-cache hit/miss). Include
-  sustained Web throughput plus first-use TTI rows under controlled
-  network/cache conditions.
+  controls and explicit startup-path annotations (asset-cache hit/miss). The
+  minimum publication matrix is one recent iPhone (A-series) and one recent
+  Android flagship (Snapdragon class), each with \(n \ge 10\) repeated trials in
+  release mode and reported p50/p95 plus 95\% CI. Include sustained Web
+  throughput and first-use TTI rows under controlled network/cache conditions
+  (cold-cache and warm-cache, plus explicit throttled/unthrottled profiles).
   \item \textbf{Operational hardening:} provide first-class self-hosting
   recipes for web module/WASM/model assets, with CSP and integrity examples.
   \item \textbf{Reliability engineering:} evaluate optional crash-containment
@@ -2493,9 +2568,12 @@ Second, the package is suitable for on-device and offline-native inference
 workflows once required model assets are provisioned locally. Third, current
 performance trade-offs are transparent: warm-path Flutter throughput can exceed
 the Python baseline in measured settings (desktop, iOS simulator, Android
-emulator), while cold-start and short-session effective throughput remain lower.
-Boundary-decomposed profiling still identifies a persistent JSON-path penalty
-(roughly 19.95--47.93\% in this report) as a primary optimization target.
+emulator, and Linux/Windows batch CI rows), while cold-start and short-session
+effective throughput remain lower. Linux/Windows single-mode rows are still
+below Python throughput, reinforcing execution-mode dependence as a key systems
+factor. Boundary-decomposed profiling still identifies a persistent JSON-path
+penalty (roughly 13.89--47.93\% in this report) as a primary optimization
+target.
 
 This paper intentionally does not claim a new morphology model or SOTA language
 accuracy contribution. Its contribution is systems engineering: making Kiwi
@@ -2769,6 +2847,38 @@ uv run python tool/benchmark/run_compare.py \
   --device macos --mode release --trials 3 \
   --warmup-runs 3 --measure-runs 15
 
+# Linux desktop CI row (single mode)
+uv run python tool/benchmark/run_compare.py \
+  --device linux --mode release --trials 3 \
+  --warmup-runs 3 --measure-runs 15 \
+  --flutter-analyze-impl token_count \
+  --flutter-execution-mode single \
+  --output-dir benchmark/results/gha_linux_single_t3_w3_m15_s10
+
+# Linux desktop CI row (batch mode)
+uv run python tool/benchmark/run_compare.py \
+  --device linux --mode release --trials 3 \
+  --warmup-runs 3 --measure-runs 15 \
+  --flutter-analyze-impl token_count \
+  --flutter-execution-mode batch \
+  --output-dir benchmark/results/gha_linux_batch_t3_w3_m15_s10
+
+# Windows desktop CI row (single mode)
+uv run python tool/benchmark/run_compare.py \
+  --device windows --mode release --trials 3 \
+  --warmup-runs 3 --measure-runs 15 \
+  --flutter-analyze-impl token_count \
+  --flutter-execution-mode single \
+  --output-dir benchmark/results/gha_windows_single_t3_w3_m15_s10
+
+# Windows desktop CI row (batch mode)
+uv run python tool/benchmark/run_compare.py \
+  --device windows --mode release --trials 3 \
+  --warmup-runs 3 --measure-runs 15 \
+  --flutter-analyze-impl token_count \
+  --flutter-execution-mode batch \
+  --output-dir benchmark/results/gha_windows_batch_t3_w3_m15_s10
+
 # iOS simulator row (debug in this setup)
 uv run python tool/benchmark/run_compare.py \
   --device "iPhone 17" --mode debug --trials 3 \
@@ -2832,6 +2942,10 @@ cat ~/.android/avd/Pixel_9.avd/config.ini
 Primary generated artifacts:
 \begin{itemize}[leftmargin=1.5em]
   \item \path{benchmark/results/macos_release_t3_json_batch_v2/comparison.md}
+  \item \path{benchmark/results/gha_linux_single_t3_w3_m15_s10/comparison.md}
+  \item \path{benchmark/results/gha_linux_batch_t3_w3_m15_s10/comparison.md}
+  \item \path{benchmark/results/gha_windows_single_t3_w3_m15_s10/comparison.md}
+  \item \path{benchmark/results/gha_windows_batch_t3_w3_m15_s10/comparison.md}
   \item \path{benchmark/results/ios_debug_t3_token_count_s10_isolate_worker_v1/comparison.md}
   \item \path{benchmark/results/android_release_t3_token_count_s10_isolate_worker_v1/comparison.md}
   \item \path{benchmark/results/macos_release_t3_json_batch_v2/flutter_kiwi_benchmark_trials.json}
