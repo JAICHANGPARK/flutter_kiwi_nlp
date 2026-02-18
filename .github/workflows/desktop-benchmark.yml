@@ -96,9 +96,16 @@ jobs:
             liblzma-dev \
             xvfb
 
+      - name: Prepare Linux Kiwi shared library
+        if: matrix.target == 'linux'
+        shell: bash
+        run: ./tool/build_linux_libkiwi.sh --arch x86_64
+
       - name: Run benchmark (Linux)
         if: matrix.target == 'linux'
         shell: bash
+        env:
+          FLUTTER_KIWI_NLP_LIBRARY_PATH: ${{ github.workspace }}/linux/prebuilt/libkiwi.so
         run: |
           xvfb-run -a uv run --with kiwipiepy python -u tool/benchmark/run_compare.py \
             --device "${{ matrix.target }}" \
