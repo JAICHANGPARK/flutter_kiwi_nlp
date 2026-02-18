@@ -87,6 +87,12 @@ def parse_args() -> argparse.Namespace:
         help='Flutter benchmark analyze path: json(full payload) or token_count.',
     )
     parser.add_argument(
+        '--flutter-execution-mode',
+        choices=('single', 'batch'),
+        default='batch',
+        help='Flutter benchmark execution mode: single(sentence loop) or batch.',
+    )
+    parser.add_argument(
         '--kiwi-analyze-impl',
         choices=('analyze', 'tokenize'),
         default='analyze',
@@ -446,6 +452,7 @@ def main() -> int:
         f'--dart-define=KIWI_BENCH_CREATE_MATCH_OPTIONS={args.create_match_options}',
         f'--dart-define=KIWI_BENCH_ANALYZE_MATCH_OPTIONS={args.analyze_match_options}',
         f'--dart-define=KIWI_BENCH_ANALYZE_IMPL={args.flutter_analyze_impl}',
+        f'--dart-define=KIWI_BENCH_EXECUTION_MODE={args.flutter_execution_mode}',
         f'--dart-define=KIWI_BENCH_SAMPLE_COUNT={args.sample_count}',
     ]
     if args.model_path:

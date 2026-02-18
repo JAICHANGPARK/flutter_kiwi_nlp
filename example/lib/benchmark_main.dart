@@ -57,6 +57,10 @@ const String _analyzeImplDefine = String.fromEnvironment(
   'KIWI_BENCH_ANALYZE_IMPL',
   defaultValue: 'json',
 );
+const String _executionModeDefine = String.fromEnvironment(
+  'KIWI_BENCH_EXECUTION_MODE',
+  defaultValue: 'batch',
+);
 const String _sampleCountDefine = String.fromEnvironment(
   'KIWI_BENCH_SAMPLE_COUNT',
   defaultValue: '10',
@@ -70,6 +74,8 @@ const String _jsonChunkMarker = 'KIWI_BENCHMARK_JSON_B64_CHUNK=';
 const int _jsonChunkSize = 512;
 const String _analyzeImplJson = 'json';
 const String _analyzeImplTokenCount = 'token_count';
+const String _executionModeSingle = 'single';
+const String _executionModeBatch = 'batch';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +145,7 @@ class _BenchmarkConfig {
     required this.createMatchOptions,
     required this.analyzeMatchOptions,
     required this.analyzeImpl,
+    required this.executionMode,
     required this.sampleCount,
     required this.trialId,
   });
@@ -154,6 +161,7 @@ class _BenchmarkConfig {
   final int createMatchOptions;
   final int analyzeMatchOptions;
   final String analyzeImpl;
+  final String executionMode;
   final int sampleCount;
   final int trialId;
 
@@ -178,6 +186,7 @@ class _BenchmarkConfig {
         minimum: 0,
       ),
       analyzeImpl: _parseAnalyzeImpl(_analyzeImplDefine),
+      executionMode: _parseExecutionMode(_executionModeDefine),
       sampleCount: _parseInt(_sampleCountDefine, fallback: 10, minimum: 0),
       trialId: _parseInt(_trialIdDefine, fallback: 0, minimum: 0),
     );
@@ -236,6 +245,7 @@ class _BenchmarkResult {
     required this.createMatchOptions,
     required this.analyzeMatchOptions,
     required this.analyzeImpl,
+    required this.executionMode,
     required this.trialId,
     required this.sentenceCount,
     required this.initMs,
@@ -257,6 +267,7 @@ class _BenchmarkResult {
   final int createMatchOptions;
   final int analyzeMatchOptions;
   final String analyzeImpl;
+  final String executionMode;
   final int trialId;
   final int sentenceCount;
   final double initMs;
@@ -314,6 +325,7 @@ class _BenchmarkResult {
       'create_match_options': createMatchOptions,
       'analyze_match_options': analyzeMatchOptions,
       'analyze_impl': analyzeImpl,
+      'execution_mode': executionMode,
       'trial_id': trialId,
       'sentence_count': sentenceCount,
       'sample_count': sampleOutputs.length,
@@ -368,6 +380,7 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       runs: config.warmupRuns,
       options: options,
       analyzeImpl: primaryImpl,
+      executionMode: config.executionMode,
     );
 
     final _RunStats primaryMeasured = await _executeRuns(
@@ -376,6 +389,7 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       runs: config.measureRuns,
       options: options,
       analyzeImpl: primaryImpl,
+      executionMode: config.executionMode,
     );
     await _executeRuns(
       analyzer: analyzer,
@@ -383,6 +397,7 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       runs: config.warmupRuns,
       options: options,
       analyzeImpl: secondaryImpl,
+      executionMode: config.executionMode,
     );
     final _RunStats secondaryMeasured = await _executeRuns(
       analyzer: analyzer,
@@ -390,6 +405,7 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       runs: config.measureRuns,
       options: options,
       analyzeImpl: secondaryImpl,
+      executionMode: config.executionMode,
     );
 
     final _RunStats measured = primaryMeasured;
@@ -417,6 +433,7 @@ Future<_BenchmarkResult> _runBenchmark(_BenchmarkConfig config) async {
       createMatchOptions: config.createMatchOptions,
       analyzeMatchOptions: config.analyzeMatchOptions,
       analyzeImpl: config.analyzeImpl,
+      executionMode: config.executionMode,
       trialId: config.trialId,
       sentenceCount: sentences.length,
       initMs: initStopwatch.elapsedMicroseconds / 1000.0,
@@ -478,6 +495,7 @@ Future<_RunStats> _executeRuns({
   required int runs,
   required KiwiAnalyzeOptions options,
   required String analyzeImpl,
+  required String executionMode,
 }) async {
   int totalAnalyses = 0;
   int totalChars = 0;
@@ -495,29 +513,56 @@ Future<_RunStats> _executeRuns({
   final Stopwatch stopwatch = Stopwatch()..start();
 
   if (useTokenCount) {
-    totalAnalyses = sentenceCount * runs;
-    totalChars = charsPerRun * runs;
-    totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
-      sentenceTexts,
-      runs: runs,
-      options: options,
-    );
-  } else {
-    for (int runIndex = 0; runIndex < runs; runIndex += 1) {
-      final List<KiwiAnalyzeResult> results = await analyzer.analyzeBatch(
+    if (executionMode == _executionModeBatch) {
+      totalAnalyses = sentenceCount * runs;
+      totalChars = charsPerRun * runs;
+      totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
         sentenceTexts,
+        runs: runs,
         options: options,
       );
-      if (results.length != sentenceCount) {
-        throw StateError(
-          'Unexpected analyze batch size: '
-          'expected $sentenceCount, got ${results.length}.',
-        );
+    } else {
+      for (int runIndex = 0; runIndex < runs; runIndex += 1) {
+        for (final _BenchmarkSentence sentence in sentences) {
+          totalAnalyses += 1;
+          totalChars += sentence.runeLength;
+          totalTokens += await analyzer.analyzeTokenCount(
+            sentence.text,
+            options: options,
+          );
+        }
       }
-      totalAnalyses += sentenceCount;
-      totalChars += charsPerRun;
-      for (final KiwiAnalyzeResult result in results) {
-        totalTokens += _tokenCountOfBestCandidate(result);
+    }
+  } else {
+    if (executionMode == _executionModeBatch) {
+      for (int runIndex = 0; runIndex < runs; runIndex += 1) {
+        final List<KiwiAnalyzeResult> results = await analyzer.analyzeBatch(
+          sentenceTexts,
+          options: options,
+        );
+        if (results.length != sentenceCount) {
+          throw StateError(
+            'Unexpected analyze batch size: '
+            'expected $sentenceCount, got ${results.length}.',
+          );
+        }
+        totalAnalyses += sentenceCount;
+        totalChars += charsPerRun;
+        for (final KiwiAnalyzeResult result in results) {
+          totalTokens += _tokenCountOfBestCandidate(result);
+        }
+      }
+    } else {
+      for (int runIndex = 0; runIndex < runs; runIndex += 1) {
+        for (final _BenchmarkSentence sentence in sentences) {
+          final KiwiAnalyzeResult result = await analyzer.analyze(
+            sentence.text,
+            options: options,
+          );
+          totalAnalyses += 1;
+          totalChars += sentence.runeLength;
+          totalTokens += _tokenCountOfBestCandidate(result);
+        }
       }
     }
   }
@@ -601,6 +646,14 @@ String _parseAnalyzeImpl(String rawValue) {
     return _analyzeImplTokenCount;
   }
   return _analyzeImplJson;
+}
+
+String _parseExecutionMode(String rawValue) {
+  final String normalized = rawValue.trim().toLowerCase();
+  if (normalized == _executionModeSingle) {
+    return _executionModeSingle;
+  }
+  return _executionModeBatch;
 }
 
 Future<void> _tryWritePayload(

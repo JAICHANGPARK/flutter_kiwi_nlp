@@ -1,0 +1,155 @@
+name: desktop-benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      flutter_mode:
+        description: Flutter build mode
+        required: false
+        default: release
+        type: choice
+        options:
+          - profile
+          - release
+      trials:
+        description: Repeated trials per runtime
+        required: false
+        default: '3'
+        type: string
+      warmup_runs:
+        description: Warm-up pass count
+        required: false
+        default: '3'
+        type: string
+      measure_runs:
+        description: Timed measurement pass count
+        required: false
+        default: '15'
+        type: string
+      sample_count:
+        description: Sample POS output sentence count
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: ${{ matrix.target }}-${{ matrix.execution_mode }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+        execution_mode:
+          - single
+          - batch
+    env:
+      OUT_DIR: benchmark/results/gha_${{ matrix.target }}_${{ matrix.execution_mode }}_t${{ inputs.trials }}_w${{ inputs.warmup_runs }}_m${{ inputs.measure_runs }}_s${{ inputs.sample_count }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Enable desktop target
+        shell: bash
+        run: flutter config --enable-${{ matrix.target }}-desktop
+
+      - name: Install Linux runtime/build dependencies
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            xvfb
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install kiwipiepy
+
+      - name: Run benchmark (Linux)
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          xvfb-run -a python tool/benchmark/run_compare.py \
+            --device "${{ matrix.target }}" \
+            --mode "${{ inputs.flutter_mode }}" \
+            --trials "${{ inputs.trials }}" \
+            --warmup-runs "${{ inputs.warmup_runs }}" \
+            --measure-runs "${{ inputs.measure_runs }}" \
+            --top-n 1 \
+            --flutter-analyze-impl token_count \
+            --flutter-execution-mode "${{ matrix.execution_mode }}" \
+            --kiwi-analyze-impl analyze \
+            --sample-count "${{ inputs.sample_count }}" \
+            --output-dir "${OUT_DIR}"
+
+      - name: Run benchmark (Windows)
+        if: matrix.target == 'windows'
+        shell: bash
+        run: |
+          python tool/benchmark/run_compare.py \
+            --device "${{ matrix.target }}" \
+            --mode "${{ inputs.flutter_mode }}" \
+            --trials "${{ inputs.trials }}" \
+            --warmup-runs "${{ inputs.warmup_runs }}" \
+            --measure-runs "${{ inputs.measure_runs }}" \
+            --top-n 1 \
+            --flutter-analyze-impl token_count \
+            --flutter-execution-mode "${{ matrix.execution_mode }}" \
+            --kiwi-analyze-impl analyze \
+            --sample-count "${{ inputs.sample_count }}" \
+            --output-dir "${OUT_DIR}"
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ matrix.target }}-${{ matrix.execution_mode }}
+          path: ${{ env.OUT_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Append report to job summary
+        if: always()
+        shell: bash
+        run: |
+          report_path="${OUT_DIR}/comparison.md"
+          if [[ -f "${report_path}" ]]; then
+            {
+              echo "## ${{ matrix.target }}-${{ matrix.execution_mode }}"
+              echo
+              cat "${report_path}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "comparison.md not found: ${report_path}" \
+              >> "${GITHUB_STEP_SUMMARY}"
+          fi

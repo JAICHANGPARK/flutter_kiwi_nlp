@@ -268,6 +268,10 @@ def build_report(
         f" | {first_or_mixed(kiwi_trials, 'analyze_impl')} |"
     )
     lines.append(
+        f"| execution_mode | {first_or_mixed(flutter_trials, 'execution_mode')}"
+        " | - |"
+    )
+    lines.append(
         f"| num_threads / num_workers | {first_or_mixed(flutter_trials, 'num_threads')}"
         f" | {first_or_mixed(kiwi_trials, 'num_workers')} |"
     )
