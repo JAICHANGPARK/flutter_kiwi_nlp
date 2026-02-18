@@ -11,7 +11,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,21 @@ MODEL_TYPE_MAP: dict[int, str | None] = {
     0x0400: 'cong',
     0x0500: 'cong-global',
 }
+
+
+def safe_print_line(line: str, *, stream: TextIO = sys.stdout) -> None:
+    """Print a line without failing on Windows console encodings."""
+    encoding = stream.encoding or 'utf-8'
+    try:
+        stream.write(line)
+    except UnicodeEncodeError:
+        safe_line = line.encode(encoding, errors='backslashreplace').decode(
+            encoding,
+            errors='replace',
+        )
+        stream.write(safe_line)
+    stream.write('\n')
+    stream.flush()
 
 
 def resolve_model_type(build_options: int) -> str | None:
@@ -483,8 +498,9 @@ def main() -> int:
         sample_outputs=sample_outputs,
     )
 
-    encoded = json.dumps(payload, ensure_ascii=False)
-    print(f'KIWI_BENCHMARK_JSON={encoded}')
+    # Keep stdout payload ASCII-only for robust parsing on Windows runners.
+    encoded_stdout = json.dumps(payload, ensure_ascii=True)
+    safe_print_line(f'KIWI_BENCHMARK_JSON={encoded_stdout}')
 
     if config.output_path is not None:
         config.output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -500,5 +516,5 @@ if __name__ == '__main__':
     try:
         raise SystemExit(main())
     except Exception as error:  # pragma: no cover - CLI failure path
-        print(f'KIWI_BENCHMARK_ERROR={error}', file=sys.stderr)
+        safe_print_line(f'KIWI_BENCHMARK_ERROR={error}', stream=sys.stderr)
         raise
