@@ -2439,6 +2439,28 @@ next quality multiplier for this plugin class.
   payload designs (for example FlatBuffers/Protobuf-style schemas) and typed
   native transfer paths against current JSON baseline. Report per-phase gains
   (serialize/parse/call boundary) and safety complexity (ownership/lifetime).
+  To make this roadmap auditable, the next revision will use explicit target
+  thresholds against the current baseline:
+  \begin{itemize}[leftmargin=1.5em]
+    \item \textbf{Primary target:} at least 40\% relative reduction in
+    boundary loss (Table~\ref{tab:benchmark-boundary}) from the current
+    36.85\%/47.93\%/19.95\% (desktop/iOS/Android) to
+    \(\le\)22.11\%/\(\le\)28.76\%/\(\le\)11.97\%.
+    \item \textbf{Primary target:} at least 35\% relative reduction in
+    boundary overhead per analysis from
+    0.0485/0.0891/0.0810 ms to
+    \(\le\)0.0315/\(\le\)0.0579/\(\le\)0.0527 ms.
+    \item \textbf{Stretch target:} session-length effective throughput ratio
+    at \(N=1000\) (Table~\ref{tab:benchmark-session-effective}) to reach
+    \(\ge\)0.85x/\(\ge\)0.80x/\(\ge\)0.45x
+    (desktop/iOS/Android) from current 0.73x/0.68x/0.33x.
+    \item \textbf{Quality guardrails:} token/POS agreement regression
+    \(\le\)0.2 percentage points, no increase in crash/timeout incidence, and
+    peak RSS increase \(\le\)10\%.
+    \item \textbf{Statistical acceptance:} \(n \ge 10\) repeated trials per
+    target and 95\% CI reporting; an optimization is accepted only when both
+    the mean improvement and the CI lower bound exceed zero.
+  \end{itemize}
   \item \textbf{Benchmark external validity:} add release/profile measurements
   on physical iOS and Android devices, with repeated runs under thermal-state
   controls and explicit startup-path annotations (asset-cache hit/miss). Include
