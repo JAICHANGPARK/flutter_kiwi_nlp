@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_command(command: list[str], *, cwd: Path | None = None) -> None:
-    print(f"$ {shlex.join(command)}")
+    print(f"$ {shlex.join(command)}", flush=True)
     subprocess.run(command, cwd=cwd, check=True)
 
 
@@ -171,7 +171,7 @@ def run_flutter_benchmark(
     output_json_path: Path | None = None,
     android_device_id: str | None = None,
 ) -> dict[str, object]:
-    print(f"$ {shlex.join(command)}")
+    print(f"$ {shlex.join(command)}", flush=True)
 
     marker = 'KIWI_BENCHMARK_JSON='
     chunk_marker = 'KIWI_BENCHMARK_JSON_B64_CHUNK='
@@ -404,10 +404,7 @@ def run_flutter_benchmark(
                             parsed = json.loads(raw_json)
                         except json.JSONDecodeError:
                             if debug_parser:
-                                print(
-                                    '[parser] JSON marker line was truncated',
-                                    flush=True,
-                                )
+                                print('[parser] JSON marker line was truncated', flush=True)
                             parsed = None
                         if isinstance(parsed, dict):
                             if debug_parser:
@@ -535,7 +532,7 @@ def main() -> int:
     kiwi_trials: list[dict[str, object]] = []
 
     for trial_id in range(1, args.trials + 1):
-        print(f'\n=== Trial {trial_id}/{args.trials} ===')
+        print(f'\n=== Trial {trial_id}/{args.trials} ===', flush=True)
 
         flutter_trial_json = (
             output_dir / f'flutter_kiwi_benchmark_trial_{trial_id:02d}.json'
@@ -600,7 +597,7 @@ def main() -> int:
     ]
     run_command(report_command, cwd=repo_root)
 
-    print(f'\nDone. Open: {report_md}')
+    print(f'\nDone. Open: {report_md}', flush=True)
     return 0
 
 

@@ -56,6 +56,7 @@ jobs:
           - batch
     env:
       OUT_DIR: benchmark/results/gha_${{ matrix.target }}_${{ matrix.execution_mode }}_t${{ inputs.trials }}_w${{ inputs.warmup_runs }}_m${{ inputs.measure_runs }}_s${{ inputs.sample_count }}
+      PYTHONUNBUFFERED: '1'
 
     steps:
       - name: Checkout
@@ -96,7 +97,7 @@ jobs:
         if: matrix.target == 'linux'
         shell: bash
         run: |
-          xvfb-run -a uv run --with kiwipiepy python tool/benchmark/run_compare.py \
+          xvfb-run -a uv run --with kiwipiepy python -u tool/benchmark/run_compare.py \
             --device "${{ matrix.target }}" \
             --mode "${{ inputs.flutter_mode }}" \
             --trials "${{ inputs.trials }}" \
@@ -107,13 +108,13 @@ jobs:
             --flutter-execution-mode "${{ matrix.execution_mode }}" \
             --kiwi-analyze-impl analyze \
             --sample-count "${{ inputs.sample_count }}" \
-            --output-dir "${OUT_DIR}"
+            --output-dir "$OUT_DIR"
 
       - name: Run benchmark (Windows)
         if: matrix.target == 'windows'
         shell: pwsh
         run: |
-          uv run --with kiwipiepy python tool/benchmark/run_compare.py `
+          uv run --with kiwipiepy python -u tool/benchmark/run_compare.py `
             --device "${{ matrix.target }}" `
             --mode "${{ inputs.flutter_mode }}" `
             --trials "${{ inputs.trials }}" `
@@ -124,7 +125,7 @@ jobs:
             --flutter-execution-mode "${{ matrix.execution_mode }}" `
             --kiwi-analyze-impl analyze `
             --sample-count "${{ inputs.sample_count }}" `
-            --output-dir "${OUT_DIR}"
+            --output-dir "$env:OUT_DIR"
 
       - name: Upload benchmark artifact
         if: always()
