@@ -9,6 +9,7 @@ import json
 import os
 import select
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -144,6 +145,20 @@ def parse_args() -> argparse.Namespace:
 def run_command(command: list[str], *, cwd: Path | None = None) -> None:
     print(f"$ {shlex.join(command)}")
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def resolve_flutter_executable() -> str:
+    """Resolve flutter executable across Unix/Windows runners."""
+    candidates = ['flutter', 'flutter.bat', 'flutter.exe']
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+
+    raise FileNotFoundError(
+        'Could not find Flutter executable in PATH. '
+        'Expected one of: flutter, flutter.bat, flutter.exe'
+    )
 
 
 def run_flutter_benchmark(
@@ -434,9 +449,10 @@ def main() -> int:
     report_md = output_dir / 'comparison.md'
 
     example_dir = repo_root / 'example'
+    flutter_executable = resolve_flutter_executable()
 
     flutter_command = [
-        'flutter',
+        flutter_executable,
         'run',
         '--no-pub',
         '-d',
@@ -487,7 +503,7 @@ def main() -> int:
     if args.model_path:
         kiwi_command_base.extend(['--model-path', args.model_path])
 
-    run_command(['flutter', 'pub', 'get'], cwd=example_dir)
+    run_command([flutter_executable, 'pub', 'get'], cwd=example_dir)
 
     flutter_trials: list[dict[str, object]] = []
     kiwi_trials: list[dict[str, object]] = []

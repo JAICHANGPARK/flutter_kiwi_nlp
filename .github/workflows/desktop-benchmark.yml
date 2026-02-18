@@ -114,19 +114,19 @@ jobs:
 
       - name: Run benchmark (Windows)
         if: matrix.target == 'windows'
-        shell: bash
+        shell: pwsh
         run: |
-          python tool/benchmark/run_compare.py \
-            --device "${{ matrix.target }}" \
-            --mode "${{ inputs.flutter_mode }}" \
-            --trials "${{ inputs.trials }}" \
-            --warmup-runs "${{ inputs.warmup_runs }}" \
-            --measure-runs "${{ inputs.measure_runs }}" \
-            --top-n 1 \
-            --flutter-analyze-impl token_count \
-            --flutter-execution-mode "${{ matrix.execution_mode }}" \
-            --kiwi-analyze-impl analyze \
-            --sample-count "${{ inputs.sample_count }}" \
+          python tool/benchmark/run_compare.py `
+            --device "${{ matrix.target }}" `
+            --mode "${{ inputs.flutter_mode }}" `
+            --trials "${{ inputs.trials }}" `
+            --warmup-runs "${{ inputs.warmup_runs }}" `
+            --measure-runs "${{ inputs.measure_runs }}" `
+            --top-n 1 `
+            --flutter-analyze-impl token_count `
+            --flutter-execution-mode "${{ matrix.execution_mode }}" `
+            --kiwi-analyze-impl analyze `
+            --sample-count "${{ inputs.sample_count }}" `
             --output-dir "${OUT_DIR}"
 
       - name: Upload benchmark artifact
