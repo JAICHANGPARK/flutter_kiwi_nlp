@@ -1,16 +1,11 @@
-## 0.2.0
+## 2026.7.24
 
 * Upgrade Kiwi core library binaries, prebuilts, and default base model archive to Kiwi `v0.23.2` (includes ARM NEON quantization acceleration for ~20% speedup, OOV detection enhancements, typo tolerance fixes, and Windows path stability).
 * Update native asset fetch and build tool scripts (`fetch_kiwi_release_assets.sh`, `build_macos_kiwi_dylib.sh`, `build_linux_libkiwi.sh`, `build_ios_kiwi_xcframework.sh`, `build_windows_kiwi_dll.ps1`) to target Kiwi `v0.23.2`.
 * Update default model cache key and SHA-256 checksums (`15f3578...`) for `kiwi_model_v0.23.2_base.tgz`.
-* Bump package version to `0.2.0`.
-
-## 0.1.4
-
-* Suppress FFI binding `non_constant_identifier_names` linter warnings to maintain clean static analysis.
+* Suppress FFI binding `non_constant_identifier_names` linter warnings.
 * Update `archive` package dependency to `^4.0.9`.
-* Verify unit & FFI binding tests (70 passed).
-* Bump package version to `0.1.4`.
+* Adopt CalVer versioning scheme (`2026.7.24`).
 
 ## 0.1.3
 
