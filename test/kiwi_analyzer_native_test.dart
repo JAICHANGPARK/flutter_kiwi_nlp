@@ -1,3 +1,5 @@
+// ignore_for_file: non_constant_identifier_names
+
 // Verifies native analyzer behavior with controllable fake FFI bindings.
 import 'dart:async';
 import 'dart:convert';

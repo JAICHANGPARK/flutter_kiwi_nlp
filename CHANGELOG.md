@@ -1,3 +1,10 @@
+## 0.1.4
+
+* Suppress FFI binding `non_constant_identifier_names` linter warnings to maintain clean static analysis.
+* Update `archive` package dependency to `^4.0.9`.
+* Verify unit & FFI binding tests (70 passed).
+* Bump package version to `0.1.4`.
+
 ## 0.1.3
 
 * Add pub.dev `screenshots` metadata in `pubspec.yaml` using files under
