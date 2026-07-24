@@ -19,7 +19,7 @@ usage() {
 Usage: tool/fetch_kiwi_release_assets.sh [options]
 
 Options:
-  --version <tag|latest>     Kiwi release tag (example: v0.22.2). Default: latest
+  --version <tag|latest>     Kiwi release tag (example: v0.23.2). Default: latest
   --linux-arch <arch>        Linux asset arch: x86_64, aarch64, ppc64le. Default: x86_64
   --windows-arch <arch>      Windows asset arch: x64, Win32. Default: x64
   --model-root <path>        Directory where model archive is extracted. Default: ./.kiwi

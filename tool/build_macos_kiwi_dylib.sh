@@ -8,7 +8,7 @@ if [[ -d "${ROOT_DIR}/.tmp/kiwi-src-android/.git" ]]; then
 fi
 KIWI_SRC="${DEFAULT_KIWI_SRC}"
 KIWI_REPO_URL="${KIWI_REPO_URL:-https://github.com/bab2min/Kiwi}"
-KIWI_REF="${KIWI_REF:-v0.22.2}"
+KIWI_REF="${KIWI_REF:-v0.23.2}"
 BUILD_ROOT="${ROOT_DIR}/.tmp/kiwi-macos-build"
 OUT_DYLIB="${ROOT_DIR}/macos/Frameworks/libkiwi.dylib"
 ARCHS="arm64,x86_64"
@@ -34,7 +34,7 @@ Options:
   --kiwi-src <path>          Existing Kiwi source root
                              (default: ./.tmp/kiwi-src-macos,
                               reuses ./.tmp/kiwi-src-android when available)
-  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.22.2)
+  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.23.2)
   --kiwi-repo <url>          Kiwi git repository URL
   --archs <csv>              Target arch list (default: arm64,x86_64)
   --jobs <n>                 Parallel build jobs (default: 8)
@@ -49,7 +49,7 @@ Environment:
       Same as --rebuild.
   FLUTTER_KIWI_MACOS_KIWI_SRC=/path/to/Kiwi
       Use local Kiwi source.
-  FLUTTER_KIWI_MACOS_KIWI_REF=v0.22.2
+  FLUTTER_KIWI_MACOS_KIWI_REF=v0.23.2
       Override clone ref.
   FLUTTER_KIWI_MACOS_ARCHS=arm64,x86_64
       Override target arch list.

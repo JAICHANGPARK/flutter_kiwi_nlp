@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [string]$KiwiSrc = "",
-  [string]$KiwiRef = "v0.22.2",
+  [string]$KiwiRef = "v0.23.2",
   [string]$KiwiRepo = "https://github.com/bab2min/Kiwi",
   [string]$Arch = "",
   [int]$Jobs = 0,

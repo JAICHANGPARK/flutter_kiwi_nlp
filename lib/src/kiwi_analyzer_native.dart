@@ -394,14 +394,14 @@ const String _defaultModelArchiveUrl = String.fromEnvironment(
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_URL',
     defaultValue:
-        'https://github.com/bab2min/Kiwi/releases/download/v0.22.2/kiwi_model_v0.22.2_base.tgz',
+        'https://github.com/bab2min/Kiwi/releases/download/v0.23.2/kiwi_model_v0.23.2_base.tgz',
   ),
 );
 const String _defaultModelCacheKey = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_MODEL_CACHE_KEY',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_MODEL_CACHE_KEY',
-    defaultValue: 'v0.22.2_base',
+    defaultValue: 'v0.23.2_base',
   ),
 );
 const String _defaultModelArchiveSha256 = String.fromEnvironment(
@@ -409,7 +409,7 @@ const String _defaultModelArchiveSha256 = String.fromEnvironment(
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_SHA256',
     defaultValue:
-        'aa11a6e5b06c7db43e9b07148620f5fb7838a30172dacb40f75202333110f2d1',
+        '15f35787ab07281688a321f5d6bc24a117008190d9fcccb11dca188e81eba814',
   ),
 );
 const List<String> _autoAssetModelPaths = <String>[

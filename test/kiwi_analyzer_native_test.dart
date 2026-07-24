@@ -292,7 +292,7 @@ Future<void> _clearAssetHandler() async {
 Future<Directory> _prepareCachedModelDirectory() async {
   final Directory modelDirectory = Directory(
     '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/'
-    'v0.22.2_base/models/cong/base',
+    'v0.23.2_base/models/cong/base',
   );
   await modelDirectory.create(recursive: true);
   for (final String fileName in kiwiModelFileNames) {
@@ -480,7 +480,7 @@ void main() {
       '${Directory.systemTemp.path}/flutter_kiwi_nlp_model',
     );
     await _deleteDirectoryIfExists(
-      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
     );
   });
 
@@ -1007,7 +1007,7 @@ void main() {
     () async {
       await _setAssetHandler(<String, Uint8List>{});
       await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
       );
       final Uint8List archiveBytes = _createGzipTarBytes(<String, List<int>>{
         'models/cong/base/cong.mdl': <int>[1, 2, 3],
@@ -1044,7 +1044,7 @@ void main() {
     () async {
       await _setAssetHandler(<String, Uint8List>{});
       await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
       );
       final Uint8List archiveBytes = _createGzipTarBytes(<String, List<int>>{
         'models/cong/base/cong.mdl': <int>[1, 2, 3],
@@ -1084,7 +1084,7 @@ void main() {
     () async {
       await _setAssetHandler(<String, Uint8List>{});
       await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
       );
       debugSetKiwiNativeHttpClientFactoryForTest(
         () => _FakeHttpClient(
@@ -1147,7 +1147,7 @@ void main() {
   test('create retries download when archive extraction throws', () async {
     await _setAssetHandler(<String, Uint8List>{});
     await _deleteDirectoryIfExists(
-      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
     );
     final Uint8List invalidArchiveBytes = Uint8List.fromList(<int>[1, 2, 3]);
     int requestCount = 0;
@@ -1182,7 +1182,7 @@ void main() {
   test('create replaces stale partial/archive files and succeeds', () async {
     await _setAssetHandler(<String, Uint8List>{});
     final String cacheRootPath =
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base';
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base';
     await _deleteDirectoryIfExists(cacheRootPath);
     final Directory cacheRoot = Directory(cacheRootPath);
     await cacheRoot.create(recursive: true);
@@ -1220,7 +1220,7 @@ void main() {
     () async {
       await _setAssetHandler(<String, Uint8List>{});
       await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
       );
       debugSetKiwiNativeHttpClientFactoryForTest(
         () => _FakeHttpClient(
@@ -1252,7 +1252,7 @@ void main() {
     () async {
       await _setAssetHandler(<String, Uint8List>{});
       await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.22.2_base',
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
       );
       debugSetKiwiNativeModelPreparationTimeoutForTest(
         const Duration(milliseconds: 1),

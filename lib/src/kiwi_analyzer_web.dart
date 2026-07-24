@@ -46,14 +46,14 @@ const String _defaultModelArchiveVersion = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_VERSION',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_VERSION',
-    defaultValue: 'v0.22.2',
+    defaultValue: 'v0.23.2',
   ),
 );
 const String _defaultModelArchiveName = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_NAME',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_NAME',
-    defaultValue: 'kiwi_model_v0.22.2_base.tgz',
+    defaultValue: 'kiwi_model_v0.23.2_base.tgz',
   ),
 );
 const String _defaultModelArchiveUrl = String.fromEnvironment(

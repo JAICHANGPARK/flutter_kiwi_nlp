@@ -564,7 +564,7 @@ flutter run -d chrome \
 
 기본 아카이브 URL:
 
-- `https://github.com/bab2min/Kiwi/releases/download/v0.22.2/kiwi_model_v0.22.2_base.tgz`
+- `https://github.com/bab2min/Kiwi/releases/download/v0.23.2/kiwi_model_v0.23.2_base.tgz`
 
 ### 웹
 
