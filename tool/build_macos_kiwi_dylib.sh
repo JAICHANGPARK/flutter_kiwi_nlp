@@ -136,8 +136,12 @@ if ! xcrun --sdk macosx --find clang >/dev/null 2>&1; then
 fi
 
 if [[ "$SKIP_EXISTING" -eq 1 && -s "${OUT_DYLIB}" ]]; then
-  echo "[macos] Reusing existing library: ${OUT_DYLIB}"
-  exit 0
+  host_arch="$(uname -m)"
+  if ! command -v lipo >/dev/null 2>&1 || lipo -archs "${OUT_DYLIB}" 2>/dev/null | grep -qw "${host_arch}"; then
+    echo "[macos] Reusing existing library: ${OUT_DYLIB}"
+    exit 0
+  fi
+  echo "[macos] Existing library missing host arch (${host_arch}), rebuilding: ${OUT_DYLIB}"
 fi
 
 prepare_kiwi_source() {
