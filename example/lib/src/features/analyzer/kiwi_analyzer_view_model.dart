@@ -30,6 +30,7 @@ const List<String> _benchmarkModelFileNames = <String>[
   'dialect.dict',
   'extract.mdl',
   'multi.dict',
+  'nounchr.mdl',
   'sj.morph',
   'typo.dict',
 ];
@@ -790,14 +791,11 @@ class KiwiAnalyzerViewModel extends ChangeNotifier {
 
 class _KiwiAnalyzeWorker {
   _KiwiAnalyzeWorker._({
-    required Isolate isolate,
-    required SendPort commandPort,
-    required ReceivePort responsePort,
-    required ReceivePort exitPort,
-  }) : _isolate = isolate,
-       _commandPort = commandPort,
-       _responsePort = responsePort,
-       _exitPort = exitPort;
+    required this._isolate,
+    required this._commandPort,
+    required this._responsePort,
+    required this._exitPort,
+  });
 
   final Isolate _isolate;
   final SendPort _commandPort;
@@ -1231,7 +1229,7 @@ Future<Map<String, num>> _runBenchmarkPassInBackground({
         sum + sentence.runeLength,
   );
   final List<String> sentenceTexts = sentences
-      .map((final _BenchmarkSentenceInBackground sentence) => sentence.text)
+      .map((_BenchmarkSentenceInBackground sentence) => sentence.text)
       .toList(growable: false);
 
   final Stopwatch stopwatch = Stopwatch()..start();
@@ -1321,7 +1319,7 @@ Future<List<Map<String, Object?>>> _collectBenchmarkSamplesInBackground({
     final String top1Text = tokens.isEmpty
         ? '(결과 없음)'
         : tokens
-              .map((final KiwiToken token) => '${token.form}/${token.tag}')
+              .map((KiwiToken token) => '${token.form}/${token.tag}')
               .join(' ');
     outputs.add(<String, Object?>{
       'sentence': sentence.text,

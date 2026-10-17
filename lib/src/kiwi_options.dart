@@ -41,6 +41,9 @@ abstract final class KiwiBuildOption {
 
 /// Match option flags used by `KiwiAnalyzer.create` and [KiwiAnalyzeOptions].
 abstract final class KiwiMatchOption {
+  /// Disables optional token matching flags.
+  static const int none = 0;
+
   /// Detects URLs.
   static const int url = 1;
 
@@ -55,6 +58,24 @@ abstract final class KiwiMatchOption {
 
   /// Detects serial-like tokens.
   static const int serial = 16;
+
+  /// Detects emoji sequences.
+  static const int emoji = 1 << 5;
+
+  /// Uses rule-only out-of-vocabulary handling.
+  static const int oovRuleOnly = 0 << 8;
+
+  /// Uses character model out-of-vocabulary handling.
+  static const int oovChrModel = 1 << 8;
+
+  /// Uses character/frequency model out-of-vocabulary handling.
+  static const int oovChrFreqModel = 2 << 8;
+
+  /// Uses character/frequency/branch model out-of-vocabulary handling.
+  static const int oovChrFreqBranchModel = 3 << 8;
+
+  /// Bit mask for out-of-vocabulary handling modes.
+  static const int oovMask = 3 << 8;
 
   /// Normalizes final consonants.
   static const int normalizeCoda = 1 << 16;
@@ -74,6 +95,13 @@ abstract final class KiwiMatchOption {
   /// Joins adverb suffixes.
   static const int joinAdvSuffix = 1 << 21;
 
+  /// Joins verb and adjective suffixes.
+  static const int joinVSuffix = joinVerbSuffix | joinAdjSuffix;
+
+  /// Joins all prefix and suffix forms.
+  static const int joinAffix =
+      joinNounPrefix | joinNounSuffix | joinVSuffix | joinAdvSuffix;
+
   /// Splits complex forms.
   static const int splitComplex = 1 << 22;
 
@@ -89,8 +117,15 @@ abstract final class KiwiMatchOption {
   /// Merges sai-sios spelling forms.
   static const int mergeSaisiot = 1 << 26;
 
-  /// A baseline bundle for URL/email/hashtag/mention/serial/coda matching.
-  static const int all = url | email | hashtag | mention | serial | zCoda;
+  /// Joins the sentence-ending particle `-요` (`JX`) into the preceding ending.
+  static const int joinParticleYo = 1 << 27;
+
+  /// Uses the legacy sentence splitter behavior.
+  static const int useOldSplitter = 1 << 30;
+
+  /// A baseline bundle for URL/email/hashtag/mention/serial/emoji/coda matching.
+  static const int all =
+      url | email | hashtag | mention | serial | emoji | zCoda;
 
   /// [all] plus [normalizeCoda].
   static const int allWithNormalizing = all | normalizeCoda;

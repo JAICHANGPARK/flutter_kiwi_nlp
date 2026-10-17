@@ -19,8 +19,8 @@ usage() {
 Usage: tool/fetch_kiwi_release_assets.sh [options]
 
 Options:
-  --version <tag|latest>     Kiwi release tag (example: v0.23.2). Default: latest
-  --linux-arch <arch>        Linux asset arch: x86_64, aarch64, ppc64le. Default: x86_64
+  --version <tag|latest>     Kiwi release tag (example: v0.24.0). Default: latest
+  --linux-arch <arch>        Linux asset arch: x86_64, aarch64. Default: x86_64
   --windows-arch <arch>      Windows asset arch: x64, Win32. Default: x64
   --model-root <path>        Directory where model archive is extracted. Default: ./.kiwi
   --download-dir <path>      Temporary download directory. Default: ./.tmp/kiwi-release
@@ -109,11 +109,24 @@ else
 fi
 
 echo "[kiwi] Fetch release metadata: $RELEASE_API"
-RELEASE_JSON="$(curl -fsSL "$RELEASE_API")"
-TAG_NAME="$(jq -r '.tag_name // empty' <<<"$RELEASE_JSON")"
+RELEASE_JSON="$(curl -fsSL "$RELEASE_API" 2>/dev/null || true)"
+TAG_NAME=""
+if [[ -n "$RELEASE_JSON" ]]; then
+  TAG_NAME="$(jq -r '.tag_name // empty' <<<"$RELEASE_JSON" 2>/dev/null || true)"
+fi
 
 if [[ -z "$TAG_NAME" || "$TAG_NAME" == "null" ]]; then
-  echo "[kiwi] Could not resolve release tag from API response." >&2
+  if [[ "$VERSION" != "latest" ]]; then
+    TAG_NAME="$VERSION"
+    echo "[kiwi] GitHub API unavailable; using explicit tag: $TAG_NAME"
+  else
+    REDIRECT_URL="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/bab2min/Kiwi/releases/latest" || true)"
+    TAG_NAME="${REDIRECT_URL##*/}"
+  fi
+fi
+
+if [[ -z "$TAG_NAME" || "$TAG_NAME" == "null" || "$TAG_NAME" == "latest" ]]; then
+  echo "[kiwi] Could not resolve release tag." >&2
   exit 1
 fi
 
@@ -122,7 +135,14 @@ echo "[kiwi] Resolved tag: $TAG_NAME"
 
 asset_url() {
   local asset_name="$1"
-  jq -r --arg n "$asset_name" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$RELEASE_JSON" | head -n 1
+  local url=""
+  if [[ -n "$RELEASE_JSON" ]]; then
+    url="$(jq -r --arg n "$asset_name" '.assets[]? | select(.name == $n) | .browser_download_url' <<<"$RELEASE_JSON" 2>/dev/null | head -n 1 || true)"
+  fi
+  if [[ -z "$url" ]]; then
+    url="https://github.com/bab2min/Kiwi/releases/download/${TAG_NAME}/${asset_name}"
+  fi
+  echo "$url"
 }
 
 download_asset() {
@@ -177,11 +197,17 @@ if [[ "$FETCH_MACOS" -eq 1 ]]; then
   if command -v install_name_tool >/dev/null 2>&1; then
     install_name_tool -id "@rpath/libkiwi.dylib" "$MAC_OUT_LIB" || true
   fi
+  if command -v strip >/dev/null 2>&1; then
+    strip -x "$MAC_OUT_LIB" || true
+  fi
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --force --sign - "$MAC_OUT_LIB" || true
+  fi
 fi
 
 if [[ "$FETCH_LINUX" -eq 1 ]]; then
   case "$LINUX_ARCH" in
-    x86_64|aarch64|ppc64le) ;;
+    x86_64|aarch64) ;;
     *)
       echo "[kiwi] Unsupported --linux-arch: $LINUX_ARCH" >&2
       exit 1

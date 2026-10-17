@@ -96,6 +96,23 @@ class KiwiAnalyzer {
     _throwUnsupported();
   }
 
+  /// Corrects spacing in [text].
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
+  Future<String> space(String text, {bool resetWhitespace = false}) async {
+    _throwUnsupported();
+  }
+
+  /// Joins [chunks] with context-aware spacing.
+  ///
+  /// Throws a [KiwiException] on unsupported platforms.
+  Future<KiwiGlueResult> glue(
+    List<String> chunks, {
+    List<bool>? insertNewLines,
+  }) async {
+    _throwUnsupported();
+  }
+
   /// Releases analyzer resources.
   ///
   /// Throws a [KiwiException] on unsupported platforms.

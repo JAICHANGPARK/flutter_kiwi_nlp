@@ -6,7 +6,7 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 
 - [패키지명 안내](#패키지명-안내)
 - [기술 보고서](#기술-보고서)
-- [AI 활용 가이드](#ai-활용-가이드)
+- [AI 및 Skills 활용 가이드](#ai-및-skills-활용-가이드)
 - [지원 플랫폼](#지원-플랫폼)
 - [미지원 플랫폼](#미지원-플랫폼)
 - [주요 기능](#주요-기능)
@@ -38,28 +38,66 @@ Kiwi 기반 한국어 형태소 분석 Flutter 플러그인입니다.
 - arXiv 스타일 LaTeX 원문:
   [`doc/technical_report_arxiv.tex`](doc/technical_report_arxiv.tex)
 
-## AI 활용 가이드
+## AI 및 Skills 활용 가이드
 
-이 플러그인을 AI 코딩 도우미와 함께 사용할 때는 아래 순서가
-가장 안정적입니다.
+이 저장소는 **Claude Code**, **OpenAI Codex**, **Google Antigravity**에서 프로젝트 폴더를 열기만 해도 스킬을 즉시 자동 탐색(Auto-Discovery)하여 활용할 수 있도록 구성되어 있습니다.
 
-- LLM 인덱스: [`llms.txt`](llms.txt)
-- 저장소 전용 스킬:
-  [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
-- 스킬 API 참조:
-  [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
-- 스킬 런타임/빌드 참조:
-  [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
-- 스킬 검증 스크립트:
-  [`skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`](skills/flutter-kiwi-nlp/scripts/verify_plugin.sh)
+### 1. 에이전트별 자동 탐색 경로 (프로젝트 내장)
 
-Codex에서 스킬을 명시 호출하려면 프롬프트에 다음처럼 작성하세요.
+| AI 도구 | 프로젝트 내 자동 탐색 경로 | 호출 및 작동 방식 |
+| --- | --- | --- |
+| **Claude Code** | [`.claude/skills/flutter-kiwi-nlp`](.claude/skills/flutter-kiwi-nlp) 및 [`CLAUDE.md`](CLAUDE.md) | 프롬프트 문맥에 따라 자동 활성화되거나 `/flutter-kiwi-nlp` 슬래시 명령으로 호출 |
+| **OpenAI Codex** | [`.agents/skills/flutter-kiwi-nlp`](.agents/skills/flutter-kiwi-nlp), [`skills/flutter-kiwi-nlp/agents/openai.yaml`](skills/flutter-kiwi-nlp/agents/openai.yaml), [`AGENTS.md`](AGENTS.md) | 프롬프트에서 `$flutter-kiwi-nlp`로 명시 호출하거나 작업 설명에 따라 자동 매칭 |
+| **Google Antigravity** | [`.agents/skills.json`](.agents/skills.json), [`.agents/skills/flutter-kiwi-nlp`](.agents/skills/flutter-kiwi-nlp), [`.gemini/skills/flutter-kiwi-nlp`](.gemini/skills/flutter-kiwi-nlp), [`AGENTS.md`](AGENTS.md) | 워크스페이스 열람 시 `skills/` 폴더를 자동 마운트하여 한국어 NLP/플러그인 작업 시 즉시 활성화 |
 
-```text
-Use $flutter-kiwi-nlp to implement and validate this change.
+### 2. 프로젝트 Skills 상세 구성 (`skills/flutter-kiwi-nlp/`)
+
+- **메인 스킬 정의**: [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
+  - 앱 연동(형태소 분석, 띄어쓰기 교정 `space`, 문장 결합 `glue`, 사용자 사전 `addUserWord`) 및 플러그인 유지보수 워크플로
+- **실전 코드 레시피**: [`skills/flutter-kiwi-nlp/references/usage-recipes.md`](skills/flutter-kiwi-nlp/references/usage-recipes.md)
+  - AI가 즉시 복사·생성할 수 있는 `ChangeNotifier` 생명주기 관리, `analyze`, `analyzeBatch`, `space`, `glue`, `addUserWord`, 커스텀 옵션/모델 경로 예제
+- **공식 API 계약**: [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
+- **런타임/빌드 레퍼런스**: [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
+- **자동 검증 스크립트**: [`skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`](skills/flutter-kiwi-nlp/scripts/verify_plugin.sh)
+- **LLM 전체 색인**: [`llms.txt`](llms.txt)
+
+### 3. 외부 Flutter 앱 프로젝트에서 이 스킬 가져오기
+
+이 저장소 외부의 내 Flutter 앱 프로젝트에서 Claude Code, Codex, Antigravity가 `flutter_kiwi_nlp` 스킬을 찾게 하려면 아래 명령으로 스킬 폴더를 복사(또는 심볼릭 링크)하세요.
+
+```bash
+# Antigravity & Codex (.agents/skills)
+mkdir -p .agents/skills
+cp -R /path/to/flutter_kiwi_nlp/skills/flutter-kiwi-nlp .agents/skills/
+
+# Claude Code (.claude/skills)
+mkdir -p .claude/skills
+cp -R /path/to/flutter_kiwi_nlp/skills/flutter-kiwi-nlp .claude/skills/
 ```
 
-변경 후 기본 검증:
+### 4. AI 에이전트 프롬프트 예시
+
+**① Flutter 앱 기능 구현 (형태소 분석 / 품사 추출)**
+```text
+Use $flutter-kiwi-nlp to create a KoreanNlpService that initializes KiwiAnalyzer once, extracts nouns (NNG, NNP) from user input via analyze(), and disposes the analyzer cleanly.
+```
+
+**② 자동 띄어쓰기 교정 (`space`) 및 청크 결합 (`glue`)**
+```text
+flutter-kiwi-nlp 스킬의 usage-recipes.md를 참고해서 OCR로 끊어진 한국어 문자열 리스트를 glue()로 자연스럽게 이어 붙이고, space(resetWhitespace: true)로 띄어쓰기를 교정하는 기능을 구현해줘.
+```
+
+**③ 런타임 사용자 사전 등록 (`addUserWord`)**
+```text
+flutter-kiwi-nlp 스킬을 참고해서 분석 전에 도메인 고유명사들을 addUserWord()로 등록하고 여러 문장을 analyzeBatch()로 한 번에 분석하는 코드를 작성해줘.
+```
+
+**④ 플러그인 수정 및 검증 (저장소 기여 시)**
+```text
+Use $flutter-kiwi-nlp to implement and validate this change across native and web.
+```
+
+변경 후 기본 검증 스크립트 실행:
 
 ```bash
 ./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh
@@ -85,8 +123,8 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 ## 주요 기능
 
 - 네이티브(FFI)와 웹(WASM)에서 동일한 `KiwiAnalyzer` API 제공
-- 타입 안전 결과 모델: `KiwiAnalyzeResult`, `KiwiCandidate`, `KiwiToken`
-- `addUserWord`를 통한 런타임 사용자 사전 추가
+- 타입 안전 결과 모델: `KiwiAnalyzeResult`, `KiwiCandidate`, `KiwiToken`, `KiwiGlueResult`
+- `addUserWord`를 통한 런타임 사용자 사전 추가 및 `space`/`glue`를 통한 띄어쓰기 교정·청크 결합
 - 기본 모델 에셋 내장 (`assets/kiwi-models/cong/base`)
 - 네이티브: 기본 모델 자동 다운로드/캐시 fallback
 - 웹: 동일 출처 에셋 URL 실패 시 아카이브 다운로드 fallback
@@ -110,8 +148,11 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 | `KiwiAnalyzer.create` | `Future<KiwiAnalyzer> create({String? modelPath, String? assetModelPath, int numThreads = -1, int buildOptions = KiwiBuildOption.defaultOption, int matchOptions = KiwiMatchOption.allWithNormalizing})` | 분석기 인스턴스를 생성합니다. 모델 경로/빌드 옵션/매치 옵션을 지정할 수 있습니다. |
 | `KiwiAnalyzer.nativeVersion` | `String get nativeVersion` | 현재 백엔드 버전 문자열을 반환합니다. (예: native 버전, web/wasm 버전) |
 | `KiwiAnalyzer.analyze` | `Future<KiwiAnalyzeResult> analyze(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | 입력 문장을 형태소 분석하고 후보 목록을 반환합니다. |
+| `KiwiAnalyzer.analyzeBatch` | `Future<List<KiwiAnalyzeResult>> analyzeBatch(List<String> texts, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | 여러 문장을 순서대로 형태소 분석합니다. |
 | `KiwiAnalyzer.analyzeTokenCount` | `Future<int> analyzeTokenCount(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | 분석 결과에서 첫 번째 후보의 토큰 수만 반환합니다. (토크나이저 중심 벤치마크에 유용) |
 | `KiwiAnalyzer.addUserWord` | `Future<void> addUserWord(String word, {String tag = 'NNP', double score = 0.0})` | 런타임 사용자 사전에 단어를 추가합니다. |
+| `KiwiAnalyzer.space` | `Future<String> space(String text, {bool resetWhitespace = false})` | 입력 문장의 띄어쓰기를 교정합니다. |
+| `KiwiAnalyzer.glue` | `Future<KiwiGlueResult> glue(List<String> chunks, {List<bool>? insertNewLines})` | 여러 텍스트 청크를 문맥에 맞게 띄어쓰기하며 이어 붙입니다. |
 | `KiwiAnalyzer.close` | `Future<void> close()` | 분석기를 종료하고 리소스를 정리합니다. |
 
 지원되지 않는 플랫폼에서 `KiwiAnalyzer`를 생성/호출하면 `KiwiException`이 발생합니다.
@@ -132,15 +173,19 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 | `KiwiBuildOption.modelTypeCong` | `int` | 모델 타입 상수입니다. |
 | `KiwiBuildOption.modelTypeCongGlobal` | `int` | 모델 타입 상수입니다. |
 | `KiwiBuildOption.defaultOption` | `int` | 권장 기본 빌드 옵션 조합입니다. |
-| `KiwiMatchOption.url`/`email`/`hashtag`/`mention`/`serial` | `int` 비트 플래그 | URL/이메일/해시태그/멘션/일련번호 인식 옵션입니다. |
+| `KiwiMatchOption.none` | `int` | 선택적 토큰 매칭 플래그를 비활성화합니다 (`0`). |
+| `KiwiMatchOption.url`/`email`/`hashtag`/`mention`/`serial`/`emoji` | `int` 비트 플래그 | URL/이메일/해시태그/멘션/일련번호/이모지 인식 옵션입니다. |
+| `KiwiMatchOption.oovRuleOnly`/`oovChrModel`/`oovChrFreqModel`/`oovChrFreqBranchModel`/`oovMask` | `int` 비트 플래그 | 미등록어(OOV) 처리 모드 플래그 및 마스크입니다. |
 | `KiwiMatchOption.normalizeCoda` | `int` 비트 플래그 | 종성 정규화 옵션입니다. |
 | `KiwiMatchOption.joinNounPrefix`/`joinNounSuffix` | `int` 비트 플래그 | 명사 접두/접미 결합 옵션입니다. |
-| `KiwiMatchOption.joinVerbSuffix`/`joinAdjSuffix`/`joinAdvSuffix` | `int` 비트 플래그 | 용언/형용사/부사 접미 결합 옵션입니다. |
+| `KiwiMatchOption.joinVerbSuffix`/`joinAdjSuffix`/`joinAdvSuffix`/`joinVSuffix`/`joinAffix` | `int` 비트 플래그 | 용언/형용사/부사/접사 결합 옵션입니다. |
 | `KiwiMatchOption.splitComplex` | `int` 비트 플래그 | 복합 형태 분리 옵션입니다. |
 | `KiwiMatchOption.zCoda` | `int` 비트 플래그 | coda 처리 관련 옵션입니다. |
 | `KiwiMatchOption.compatibleJamo` | `int` 비트 플래그 | 호환 자모 처리 옵션입니다. |
 | `KiwiMatchOption.splitSaisiot`/`mergeSaisiot` | `int` 비트 플래그 | 사이시옷 분리/병합 옵션입니다. |
-| `KiwiMatchOption.all` | `int` | 기본 매치 옵션 묶음입니다. |
+| `KiwiMatchOption.joinParticleYo` | `int` 비트 플래그 | 종결 보조사 `-요` (`JX`) 결합 옵션입니다. |
+| `KiwiMatchOption.useOldSplitter` | `int` 비트 플래그 | 이전 버전의 문장 분리 방식 사용 옵션입니다. |
+| `KiwiMatchOption.all` | `int` | 기본 매치 옵션 묶음(`emoji` 포함)입니다. |
 | `KiwiMatchOption.allWithNormalizing` | `int` | `all + normalizeCoda` 조합입니다. |
 
 ### 결과/예외 모델 API
@@ -155,6 +200,8 @@ Use $flutter-kiwi-nlp to implement and validate this change.
 | `KiwiToken.start`/`length` | `int` | 원문 기준 시작 위치/길이입니다. |
 | `KiwiToken.wordPosition`/`sentPosition` | `int` | 단어/문장 내 위치 인덱스입니다. |
 | `KiwiToken.score`/`typoCost` | `double` | 토큰 점수/오타 비용입니다. |
+| `KiwiGlueResult.text` | `String` | `glue`로 이어 붙인 결과 문자열입니다. |
+| `KiwiGlueResult.spaceInsertions` | `List<bool>` | 인접한 청크 사이에 공백이 삽입되었는지 여부입니다. |
 | `KiwiException` | `Exception` | 플러그인 오류 타입입니다. `message` 필드로 상세 원인을 확인할 수 있습니다. |
 
 ## 용량 영향 (대략) 및 `kiwipiepy` 비교
@@ -564,7 +611,7 @@ flutter run -d chrome \
 
 기본 아카이브 URL:
 
-- `https://github.com/bab2min/Kiwi/releases/download/v0.23.2/kiwi_model_v0.23.2_base.tgz`
+- `https://github.com/bab2min/Kiwi/releases/download/v0.24.0/kiwi_model_v0.24.0_base.tgz`
 
 ### 웹
 

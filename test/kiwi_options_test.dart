@@ -17,13 +17,14 @@ void main() {
   });
 
   group('KiwiMatchOption', () {
-    test('all includes base token matching flags', () {
+    test('all includes base token matching flags including emoji', () {
       const int expected =
           KiwiMatchOption.url |
           KiwiMatchOption.email |
           KiwiMatchOption.hashtag |
           KiwiMatchOption.mention |
           KiwiMatchOption.serial |
+          KiwiMatchOption.emoji |
           KiwiMatchOption.zCoda;
 
       expect(KiwiMatchOption.all, expected);
@@ -34,6 +35,29 @@ void main() {
         KiwiMatchOption.allWithNormalizing,
         KiwiMatchOption.all | KiwiMatchOption.normalizeCoda,
       );
+    });
+
+    test('exposes v0.24.0 match option constants and composite masks', () {
+      expect(KiwiMatchOption.none, 0);
+      expect(KiwiMatchOption.emoji, 1 << 5);
+      expect(KiwiMatchOption.oovRuleOnly, 0 << 8);
+      expect(KiwiMatchOption.oovChrModel, 1 << 8);
+      expect(KiwiMatchOption.oovChrFreqModel, 2 << 8);
+      expect(KiwiMatchOption.oovChrFreqBranchModel, 3 << 8);
+      expect(KiwiMatchOption.oovMask, 3 << 8);
+      expect(
+        KiwiMatchOption.joinVSuffix,
+        KiwiMatchOption.joinVerbSuffix | KiwiMatchOption.joinAdjSuffix,
+      );
+      expect(
+        KiwiMatchOption.joinAffix,
+        KiwiMatchOption.joinNounPrefix |
+            KiwiMatchOption.joinNounSuffix |
+            KiwiMatchOption.joinVSuffix |
+            KiwiMatchOption.joinAdvSuffix,
+      );
+      expect(KiwiMatchOption.joinParticleYo, 1 << 27);
+      expect(KiwiMatchOption.useOldSplitter, 1 << 30);
     });
   });
 

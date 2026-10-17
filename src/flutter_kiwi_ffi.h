@@ -80,6 +80,23 @@ FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_add_user_word(
     const char* tag,
     float score);
 
+// Corrects spacing in input UTF-8 text.
+// Call flutter_kiwi_ffi_free_string to free the returned value.
+FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_space(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* text,
+    int32_t reset_whitespace);
+
+// Joins multiple UTF-8 text chunks with context-aware spacing and returns a
+// JSON object: {"text":"...","spaceInsertions":[true,false,...]}.
+// Call flutter_kiwi_ffi_free_string to free the returned value.
+FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_glue_json(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* const* chunks,
+    int32_t chunk_count,
+    const uint8_t* insert_new_lines,
+    int32_t has_insert_new_lines);
+
 // Frees heap strings returned by this library.
 FFI_PLUGIN_EXPORT void flutter_kiwi_ffi_free_string(char* value);
 

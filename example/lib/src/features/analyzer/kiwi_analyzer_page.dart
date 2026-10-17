@@ -100,9 +100,9 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -155,16 +155,14 @@ class _KiwiAnalyzerPageState extends State<KiwiAnalyzerPage>
     final String text = _viewModel.buildResultsAsPlainText();
     if (text.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('복사할 분석 결과가 없습니다.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('복사할 분석 결과가 없습니다.')));
       return;
     }
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('분석 결과를 클립보드에 복사했습니다.')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('분석 결과를 클립보드에 복사했습니다.')));
   }
 
   Future<void> _runBenchmarkFromAppBar() async {

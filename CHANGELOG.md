@@ -1,3 +1,15 @@
+## 2026.10.17
+
+* Upgrade Kiwi core library binaries, build scripts, default base model archive (`kiwi_model_v0.24.0_base.tgz`, `33188ba...`), bundled assets (`nounchr.mdl`), and Web WASM backend (`kiwi-nlp@0.24.0`) to Kiwi `v0.24.0`.
+* Fix C ABI compatibility for `kiwi_analyze_option_t` (`typo_transformer` and `typo_threshold` fields added in Kiwi >= `0.23.0`).
+* Port `KiwiAnalyzer.space` and `KiwiAnalyzer.glue` (`KiwiGlueResult`) across Native FFI (`kiwi_space`, `kiwi_glue`, `kiwi_free_string`), Web WASM, and stub backends.
+* Port new `KiwiMatchOption` constants from Kiwi `v0.24.0` (`none`, `emoji`, `oovRuleOnly`, `oovChrModel`, `oovChrFreqModel`, `oovChrFreqBranchModel`, `oovMask`, `joinVSuffix`, `joinAffix`, `joinParticleYo`, `useOldSplitter`) and include `emoji` in `KiwiMatchOption.all`.
+* Unload temporary model files from the Web WASM virtual filesystem (`loadResult.unload()`) after `KiwiApi.cmd('build')` to reduce memory footprint.
+* Add Android 16 KB page size alignment linker flags (`-Wl,-z,max-page-size=16384`, `-Wl,-z,common-page-size=16384`) and remove deprecated Linux `ppc64le` prebuilt target.
+* Update `LICENSE` to Apache-2.0 to match upstream Kiwi `v0.24.0` relicensing.
+* Upgrade Dart/Flutter SDK constraints (`sdk: ^3.13.0`, `flutter: '>=3.47.0'`) and package dependencies (`archive: ^4.5.2`, `ffigen: ^23.0.0`, `cupertino_icons: ^2.0.0`).
+* Expand project AI skills (`skills/flutter-kiwi-nlp/SKILL.md`, `skills/flutter-kiwi-nlp/references/usage-recipes.md`) and add AI & Skills usage guides in `README.md`, `README.ko.md`, and `README.en.md`.
+
 ## 2026.7.24
 
 * Upgrade Kiwi core library binaries, prebuilts, and default base model archive to Kiwi `v0.23.2` (includes ARM NEON quantization acceleration for ~20% speedup, OOV detection enhancements, typo tolerance fixes, and Windows path stability).

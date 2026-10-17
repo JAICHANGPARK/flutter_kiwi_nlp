@@ -125,4 +125,26 @@ void main() {
       expect(result.candidates, isEmpty);
     });
   });
+
+  group('KiwiGlueResult.fromJson', () {
+    test('parses text and boolean/numeric spaceInsertions', () {
+      final KiwiGlueResult result = KiwiGlueResult.fromJson(<String, dynamic>{
+        'text': '오늘 날씨가 좋다',
+        'spaceInsertions': <Object?>[true, 1, 0, false, 'invalid'],
+      });
+
+      expect(result.text, '오늘 날씨가 좋다');
+      expect(result.spaceInsertions, <bool>[true, true, false, false, false]);
+      expect(() => result.spaceInsertions.add(true), throwsUnsupportedError);
+    });
+
+    test('falls back to defaults when keys are missing', () {
+      final KiwiGlueResult result = KiwiGlueResult.fromJson(
+        <String, dynamic>{},
+      );
+
+      expect(result.text, '');
+      expect(result.spaceInsertions, isEmpty);
+    });
+  });
 }

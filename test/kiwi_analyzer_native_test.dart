@@ -30,6 +30,8 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   bool returnNullVersion = false;
   bool returnNullAnalyze = false;
   bool returnNullAnalyzeBatch = false;
+  bool returnNullSpace = false;
+  bool returnNullGlue = false;
   bool returnNullLastError = false;
   int analyzeTokenCountStatus = 0;
   int analyzeTokenCountValue = 0;
@@ -43,6 +45,8 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   String versionText = '0.0.1-test';
   String analyzePayload = '{"candidates": []}';
   String analyzeBatchPayload = '{"results": []}';
+  String spacePayload = 'spaced text';
+  String gluePayload = '{"text": "glued text", "spaceInsertions": [true]}';
 
   int initCallCount = 0;
   int closeCallCount = 0;
@@ -70,6 +74,11 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   String? addWord;
   String? addTag;
   double? addScore;
+  String? spaceText;
+  int? spaceResetWhitespace;
+  List<String> glueChunks = <String>[];
+  List<int>? glueInsertNewLines;
+  int? glueHasInsertNewLines;
   final List<int> freedAddresses = <int>[];
 
   ffi.Pointer<ffi.Char>? _lastErrorPointer;
@@ -212,6 +221,51 @@ class _FakeKiwiNativeBindings implements KiwiNativeBindings {
   }
 
   @override
+  ffi.Pointer<ffi.Char> flutter_kiwi_ffi_space(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Char> text,
+    int resetWhitespace,
+  ) {
+    spaceText = text.cast<Utf8>().toDartString();
+    spaceResetWhitespace = resetWhitespace;
+    if (returnNullSpace) {
+      return ffi.nullptr;
+    }
+    return _toCharPointer(spacePayload);
+  }
+
+  @override
+  ffi.Pointer<ffi.Char> flutter_kiwi_ffi_glue_json(
+    ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> chunks,
+    int chunkCount,
+    ffi.Pointer<ffi.Uint8> insertNewLines,
+    int hasInsertNewLines,
+  ) {
+    glueChunks = List<String>.generate(
+      chunkCount,
+      (int index) => chunks[index].cast<Utf8>().toDartString(),
+      growable: false,
+    );
+    glueHasInsertNewLines = hasInsertNewLines;
+    if (hasInsertNewLines != 0 &&
+        insertNewLines != ffi.nullptr &&
+        chunkCount > 1) {
+      glueInsertNewLines = List<int>.generate(
+        chunkCount - 1,
+        (int index) => insertNewLines[index],
+        growable: false,
+      );
+    } else {
+      glueInsertNewLines = null;
+    }
+    if (returnNullGlue) {
+      return ffi.nullptr;
+    }
+    return _toCharPointer(gluePayload);
+  }
+
+  @override
   void flutter_kiwi_ffi_free_string(ffi.Pointer<ffi.Char> value) {
     if (value == ffi.nullptr) {
       return;
@@ -292,14 +346,13 @@ Future<void> _clearAssetHandler() async {
 Future<Directory> _prepareCachedModelDirectory() async {
   final Directory modelDirectory = Directory(
     '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/'
-    'v0.23.2_base/models/cong/base',
+    'v0.24.0_base/models/cong/base',
   );
   await modelDirectory.create(recursive: true);
   for (final String fileName in kiwiModelFileNames) {
     final int minBytes = kiwiMinModelFileBytes[fileName] ?? 1;
-    final RandomAccessFile raf = File(
-      '${modelDirectory.path}/$fileName',
-    ).openSync(mode: FileMode.write);
+    final RandomAccessFile raf = File('${modelDirectory.path}/$fileName')
+        .openSync(mode: FileMode.write);
     raf.truncateSync(minBytes);
     raf.closeSync();
   }
@@ -480,7 +533,7 @@ void main() {
       '${Directory.systemTemp.path}/flutter_kiwi_nlp_model',
     );
     await _deleteDirectoryIfExists(
-      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
     );
   });
 
@@ -635,8 +688,7 @@ void main() {
   });
 
   test('analyzeBatch forwards arguments and decodes payload', () async {
-    fakeBindings.analyzeBatchPayload =
-        '{"results":[{"candidates":[{"probability":0.5,"tokens":[{"form":"가","tag":"NNG","start":0,"length":1,"wordPosition":0,"sentPosition":0,"score":0.1,"typoCost":0.0}]}]},{"candidates":[]}]}';
+    fakeBindings.analyzeBatchPayload = '{"results":[{"candidates":[{"probability":0.5,"tokens":[{"form":"가","tag":"NNG","start":0,"length":1,"wordPosition":0,"sentPosition":0,"score":0.1,"typoCost":0.0}]}]},{"candidates":[]}]}';
     final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
       modelPath: '/tmp/model_path',
     );
@@ -769,34 +821,31 @@ void main() {
     await analyzer.close();
   });
 
-  test(
-    'analyzeTokenCountBatchRepeated forwards arguments and returns total tokens',
-    () async {
-      fakeBindings.analyzeTokenCountBatchRunsTotalTokens = 123;
-      final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
-        modelPath: '/tmp/model_path',
-      );
+  test('analyzeTokenCountBatchRepeated forwards arguments and returns total tokens', () async {
+    fakeBindings.analyzeTokenCountBatchRunsTotalTokens = 123;
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
 
-      final int totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
-        <String>['하나', '둘'],
-        runs: 5,
-        options: const KiwiAnalyzeOptions(
-          topN: 2,
-          matchOptions: KiwiMatchOption.url,
-        ),
-      );
+    final int totalTokens = await analyzer.analyzeTokenCountBatchRepeated(
+      <String>['하나', '둘'],
+      runs: 5,
+      options: const KiwiAnalyzeOptions(
+        topN: 2,
+        matchOptions: KiwiMatchOption.url,
+      ),
+    );
 
-      expect(totalTokens, 123);
-      expect(fakeBindings.analyzeTokenCountBatchRunsTexts, <String>['하나', '둘']);
-      expect(fakeBindings.analyzeTokenCountBatchRunsRuns, 5);
-      expect(fakeBindings.analyzeTokenCountBatchRunsTopN, 2);
-      expect(
-        fakeBindings.analyzeTokenCountBatchRunsMatchOptions,
-        KiwiMatchOption.url,
-      );
-      await analyzer.close();
-    },
-  );
+    expect(totalTokens, 123);
+    expect(fakeBindings.analyzeTokenCountBatchRunsTexts, <String>['하나', '둘']);
+    expect(fakeBindings.analyzeTokenCountBatchRunsRuns, 5);
+    expect(fakeBindings.analyzeTokenCountBatchRunsTopN, 2);
+    expect(
+      fakeBindings.analyzeTokenCountBatchRunsMatchOptions,
+      KiwiMatchOption.url,
+    );
+    await analyzer.close();
+  });
 
   test('analyzeTokenCountBatchRepeated throws on native error', () async {
     fakeBindings.analyzeTokenCountBatchRunsStatus = -1;
@@ -828,6 +877,74 @@ void main() {
     await expectLater(
       analyzer.addUserWord('실패'),
       throwsA(kiwiExceptionMessage('add failed')),
+    );
+    await analyzer.close();
+  });
+
+  test('space forwards arguments, frees string, and handles errors', () async {
+    fakeBindings.spacePayload = '띄어 쓰기 결과';
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    final String spaced = await analyzer.space('띄어쓰기결과', resetWhitespace: true);
+    expect(spaced, '띄어 쓰기 결과');
+    expect(fakeBindings.spaceText, '띄어쓰기결과');
+    expect(fakeBindings.spaceResetWhitespace, 1);
+    expect(fakeBindings.freedAddresses, isNotEmpty);
+
+    fakeBindings.returnNullSpace = true;
+    fakeBindings.lastErrorText = 'space failed';
+    await expectLater(
+      analyzer.space('실패'),
+      throwsA(kiwiExceptionMessage('space failed')),
+    );
+    await analyzer.close();
+  });
+
+  test('glue forwards chunks and insertNewLines and decodes result', () async {
+    fakeBindings.gluePayload = jsonEncode(<String, Object?>{
+      'text': '오늘\n날씨가 좋다',
+      'spaceInsertions': <bool>[true, true],
+    });
+    final KiwiAnalyzer analyzer = await KiwiAnalyzer.create(
+      modelPath: '/tmp/model_path',
+    );
+
+    final KiwiGlueResult emptyResult = await analyzer.glue(const <String>[]);
+    expect(emptyResult.text, '');
+    expect(emptyResult.spaceInsertions, isEmpty);
+
+    final KiwiGlueResult result = await analyzer.glue(
+      <String>['오늘', '날씨가', '좋다'],
+      insertNewLines: <bool>[true, false],
+    );
+    expect(result.text, '오늘\n날씨가 좋다');
+    expect(result.spaceInsertions, <bool>[true, true]);
+    expect(fakeBindings.glueChunks, <String>['오늘', '날씨가', '좋다']);
+    expect(fakeBindings.glueHasInsertNewLines, 1);
+    expect(fakeBindings.glueInsertNewLines, <int>[1, 0]);
+
+    await expectLater(
+      analyzer.glue(<String>['오늘', '날씨가'], insertNewLines: <bool>[true, false]),
+      throwsA(
+        kiwiExceptionMessage(
+          'insertNewLines length must be max(0, chunks.length - 1).',
+        ),
+      ),
+    );
+
+    fakeBindings.gluePayload = '[]';
+    await expectLater(
+      analyzer.glue(<String>['오늘', '날씨가']),
+      throwsA(kiwiExceptionMessage('Unexpected glue payload.')),
+    );
+
+    fakeBindings.returnNullGlue = true;
+    fakeBindings.lastErrorText = 'glue failed';
+    await expectLater(
+      analyzer.glue(<String>['오늘', '날씨가']),
+      throwsA(kiwiExceptionMessage('glue failed')),
     );
     await analyzer.close();
   });
@@ -883,6 +1000,22 @@ void main() {
     );
     await expectLater(
       analyzer.addUserWord('abc'),
+      throwsA(
+        kiwiExceptionMessage(
+          'KiwiAnalyzer is already closed. Create a new instance.',
+        ),
+      ),
+    );
+    await expectLater(
+      analyzer.space('abc'),
+      throwsA(
+        kiwiExceptionMessage(
+          'KiwiAnalyzer is already closed. Create a new instance.',
+        ),
+      ),
+    );
+    await expectLater(
+      analyzer.glue(<String>['abc']),
       throwsA(
         kiwiExceptionMessage(
           'KiwiAnalyzer is already closed. Create a new instance.',
@@ -1002,117 +1135,108 @@ void main() {
     await analyzer.close();
   });
 
-  test(
-    'create downloads archive and fails when extracted model is incomplete',
-    () async {
-      await _setAssetHandler(<String, Uint8List>{});
-      await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
-      );
-      final Uint8List archiveBytes = _createGzipTarBytes(<String, List<int>>{
-        'models/cong/base/cong.mdl': <int>[1, 2, 3],
-      });
-      debugSetKiwiNativeHttpClientFactoryForTest(
-        () => _FakeHttpClient(
-          onGetUrl: (Uri uri) async {
-            return _FakeHttpClientResponse(HttpStatus.ok, <List<int>>[
-              archiveBytes,
-            ]);
-          },
-        ),
-      );
-      debugSetKiwiNativeArchiveOverridesForTest(
-        archiveUrl: 'http://local.test/model.tgz',
-        archiveSha256: '',
-      );
+  test('create downloads archive and fails when extracted model is incomplete', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    await _deleteDirectoryIfExists(
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
+    );
+    final Uint8List archiveBytes = _createGzipTarBytes(<String, List<int>>{
+      'models/cong/base/cong.mdl': <int>[1, 2, 3],
+    });
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) async {
+          return _FakeHttpClientResponse(HttpStatus.ok, <List<int>>[
+            archiveBytes,
+          ]);
+        },
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: '',
+    );
 
-      await expectLater(
-        KiwiAnalyzer.create(),
-        throwsA(
-          isA<KiwiException>().having(
-            (KiwiException error) => error.message,
-            'message',
-            contains('Downloaded model archive but required files are missing'),
-          ),
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        isA<KiwiException>().having(
+          (KiwiException error) => error.message,
+          'message',
+          contains('Downloaded model archive but required files are missing'),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
 
-  test(
-    'create reports checksum mismatch after archive verification retry',
-    () async {
-      await _setAssetHandler(<String, Uint8List>{});
-      await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
-      );
-      final Uint8List archiveBytes = _createGzipTarBytes(<String, List<int>>{
-        'models/cong/base/cong.mdl': <int>[1, 2, 3],
-      });
-      int requestCount = 0;
-      debugSetKiwiNativeHttpClientFactoryForTest(
-        () => _FakeHttpClient(
-          onGetUrl: (Uri uri) async {
-            requestCount += 1;
-            return _FakeHttpClientResponse(HttpStatus.ok, <List<int>>[
-              archiveBytes,
-            ]);
-          },
-        ),
-      );
-      debugSetKiwiNativeArchiveOverridesForTest(
-        archiveUrl: 'http://local.test/model.tgz',
-        archiveSha256: 'deadbeef',
-      );
+  test('create reports checksum mismatch after archive verification retry', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    await _deleteDirectoryIfExists(
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
+    );
+    final Uint8List archiveBytes = _createGzipTarBytes(<String, List<int>>{
+      'models/cong/base/cong.mdl': <int>[1, 2, 3],
+    });
+    int requestCount = 0;
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) async {
+          requestCount += 1;
+          return _FakeHttpClientResponse(HttpStatus.ok, <List<int>>[
+            archiveBytes,
+          ]);
+        },
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: 'deadbeef',
+    );
 
-      await expectLater(
-        KiwiAnalyzer.create(),
-        throwsA(
-          isA<KiwiException>().having(
-            (KiwiException error) => error.message,
-            'message',
-            contains('Default model checksum mismatch'),
-          ),
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        isA<KiwiException>().having(
+          (KiwiException error) => error.message,
+          'message',
+          contains('Default model checksum mismatch'),
         ),
-      );
-      expect(requestCount, greaterThanOrEqualTo(2));
-    },
-  );
+      ),
+    );
+    expect(requestCount, greaterThanOrEqualTo(2));
+  });
 
-  test(
-    'create propagates default model download http status failures',
-    () async {
-      await _setAssetHandler(<String, Uint8List>{});
-      await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
-      );
-      debugSetKiwiNativeHttpClientFactoryForTest(
-        () => _FakeHttpClient(
-          onGetUrl: (Uri uri) async {
-            return _FakeHttpClientResponse(
-              HttpStatus.internalServerError,
-              const <List<int>>[],
-            );
-          },
-        ),
-      );
-      debugSetKiwiNativeArchiveOverridesForTest(
-        archiveUrl: 'http://local.test/model.tgz',
-        archiveSha256: '',
-      );
+  test('create propagates default model download http status failures', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    await _deleteDirectoryIfExists(
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
+    );
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) async {
+          return _FakeHttpClientResponse(
+            HttpStatus.internalServerError,
+            const <List<int>>[],
+          );
+        },
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: '',
+    );
 
-      await expectLater(
-        KiwiAnalyzer.create(),
-        throwsA(
-          isA<KiwiException>().having(
-            (KiwiException error) => error.message,
-            'message',
-            contains('Failed to download default model (500)'),
-          ),
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        isA<KiwiException>().having(
+          (KiwiException error) => error.message,
+          'message',
+          contains('Failed to download default model (500)'),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
 
   test('debug probes expose native candidate and loaded path state', () {
     expect(debugKiwiNativeLibraryCandidatesForTest(), isNotEmpty);
@@ -1147,7 +1271,7 @@ void main() {
   test('create retries download when archive extraction throws', () async {
     await _setAssetHandler(<String, Uint8List>{});
     await _deleteDirectoryIfExists(
-      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
     );
     final Uint8List invalidArchiveBytes = Uint8List.fromList(<int>[1, 2, 3]);
     int requestCount = 0;
@@ -1182,7 +1306,7 @@ void main() {
   test('create replaces stale partial/archive files and succeeds', () async {
     await _setAssetHandler(<String, Uint8List>{});
     final String cacheRootPath =
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base';
+        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base';
     await _deleteDirectoryIfExists(cacheRootPath);
     final Directory cacheRoot = Directory(cacheRootPath);
     await cacheRoot.create(recursive: true);
@@ -1215,66 +1339,60 @@ void main() {
     await analyzer.close();
   });
 
-  test(
-    'create reports stalled stream timeout with actionable message',
-    () async {
-      await _setAssetHandler(<String, Uint8List>{});
-      await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
-      );
-      debugSetKiwiNativeHttpClientFactoryForTest(
-        () => _FakeHttpClient(
-          onGetUrl: (Uri uri) async {
-            return _TimeoutHttpClientResponse();
-          },
-        ),
-      );
-      debugSetKiwiNativeArchiveOverridesForTest(
-        archiveUrl: 'http://local.test/model.tgz',
-        archiveSha256: '',
-      );
+  test('create reports stalled stream timeout with actionable message', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    await _deleteDirectoryIfExists(
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
+    );
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) async {
+          return _TimeoutHttpClientResponse();
+        },
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: '',
+    );
 
-      await expectLater(
-        KiwiAnalyzer.create(),
-        throwsA(
-          isA<KiwiException>().having(
-            (KiwiException error) => error.message,
-            'message',
-            contains('Failed to download default model'),
-          ),
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        isA<KiwiException>().having(
+          (KiwiException error) => error.message,
+          'message',
+          contains('Failed to download default model'),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
 
-  test(
-    'create reports default-model preparation timeout through onTimeout',
-    () async {
-      await _setAssetHandler(<String, Uint8List>{});
-      await _deleteDirectoryIfExists(
-        '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.23.2_base',
-      );
-      debugSetKiwiNativeModelPreparationTimeoutForTest(
-        const Duration(milliseconds: 1),
-      );
-      debugSetKiwiNativeHttpClientFactoryForTest(
-        () => _FakeHttpClient(
-          onGetUrl: (Uri uri) => Completer<HttpClientResponse>().future,
-        ),
-      );
-      debugSetKiwiNativeArchiveOverridesForTest(
-        archiveUrl: 'http://local.test/model.tgz',
-        archiveSha256: '',
-      );
+  test('create reports default-model preparation timeout through onTimeout', () async {
+    await _setAssetHandler(<String, Uint8List>{});
+    await _deleteDirectoryIfExists(
+      '${Directory.systemTemp.path}/flutter_kiwi_nlp_model_cache/v0.24.0_base',
+    );
+    debugSetKiwiNativeModelPreparationTimeoutForTest(
+      const Duration(milliseconds: 1),
+    );
+    debugSetKiwiNativeHttpClientFactoryForTest(
+      () => _FakeHttpClient(
+        onGetUrl: (Uri uri) => Completer<HttpClientResponse>().future,
+      ),
+    );
+    debugSetKiwiNativeArchiveOverridesForTest(
+      archiveUrl: 'http://local.test/model.tgz',
+      archiveSha256: '',
+    );
 
-      await expectLater(
-        KiwiAnalyzer.create(),
-        throwsA(
-          kiwiExceptionMessage(
-            'Timed out while preparing default Kiwi model (3 minutes).',
-          ),
+    await expectLater(
+      KiwiAnalyzer.create(),
+      throwsA(
+        kiwiExceptionMessage(
+          'Timed out while preparing default Kiwi model (3 minutes).',
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
 }

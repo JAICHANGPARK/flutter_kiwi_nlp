@@ -273,9 +273,8 @@ KiwiResolvedTag resolveKiwiPosTag(String rawTag) {
   String? inflectionSuffix;
   String? inflectionDescription;
 
-  final RegExpMatch? suffixMatch = RegExp(
-    r'^([A-Z0-9_]+)-(R|I)$',
-  ).firstMatch(normalized);
+  final RegExpMatch? suffixMatch = RegExp(r'^([A-Z0-9_]+)-(R|I)$')
+      .firstMatch(normalized);
   if (suffixMatch != null) {
     baseTag = suffixMatch.group(1)!;
     inflectionSuffix = suffixMatch.group(2);

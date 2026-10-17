@@ -22,7 +22,7 @@
 #endif
 
 #define KIWI_BUILD_DEFAULT (15 | 0x0400)
-#define KIWI_MATCH_ALL_WITH_NORMALIZING ((1 | 2 | 4 | 8 | 16 | (1 << 23)) | (1 << 16))
+#define KIWI_MATCH_ALL_WITH_NORMALIZING ((1 | 2 | 4 | 8 | 16 | 32 | (1 << 23)) | (1 << 16))
 #define KIWI_DIALECT_STANDARD 0
 #define KIWI_DIALECT_ALL ((1 << 10) - 1)
 
@@ -32,6 +32,7 @@ typedef void* kiwi_res_h;
 typedef void* kiwi_morphset_h;
 typedef void* kiwi_pretokenized_h;
 typedef struct kiwi_typo* kiwi_typo_h;
+typedef struct kiwi_prepared_typo* kiwi_prepared_typo_h;
 
 typedef struct {
   int match_options;
@@ -39,6 +40,8 @@ typedef struct {
   int open_ending;
   int allowed_dialects;
   float dialect_cost;
+  kiwi_prepared_typo_h typo_transformer;
+  float typo_threshold;
 } kiwi_analyze_option_t;
 
 typedef const char* (*fn_kiwi_version)(void);
@@ -53,6 +56,9 @@ typedef kiwi_res_h (*fn_kiwi_analyze)(kiwi_h, const char*, int, kiwi_analyze_opt
 typedef int (*fn_kiwi_reader_t)(int, char*, void*);
 typedef int (*fn_kiwi_receiver_t)(int, kiwi_res_h, void*);
 typedef int (*fn_kiwi_analyze_m)(kiwi_h, fn_kiwi_reader_t, fn_kiwi_receiver_t, void*, int, kiwi_analyze_option_t);
+typedef const char* (*fn_kiwi_space)(kiwi_h, const char*, int);
+typedef const char* (*fn_kiwi_glue)(kiwi_h, const char**, int, const char*, char*);
+typedef int (*fn_kiwi_free_string)(const char*);
 typedef int (*fn_kiwi_res_size)(kiwi_res_h);
 typedef float (*fn_kiwi_res_prob)(kiwi_res_h, int);
 typedef int (*fn_kiwi_res_word_num)(kiwi_res_h, int);
@@ -77,6 +83,9 @@ typedef struct {
   fn_kiwi_close kiwi_close;
   fn_kiwi_analyze kiwi_analyze;
   fn_kiwi_analyze_m kiwi_analyze_m;
+  fn_kiwi_space kiwi_space;
+  fn_kiwi_glue kiwi_glue;
+  fn_kiwi_free_string kiwi_free_string;
   fn_kiwi_res_size kiwi_res_size;
   fn_kiwi_res_prob kiwi_res_prob;
   fn_kiwi_res_word_num kiwi_res_word_num;
@@ -337,6 +346,10 @@ static int load_kiwi_library_once(void) {
 
   // Optional on legacy distributions.
   g_kiwi_api.kiwi_analyze_m = (fn_kiwi_analyze_m)kiwi_dlsym(g_kiwi_lib, "kiwi_analyze_m");
+  g_kiwi_api.kiwi_space = (fn_kiwi_space)kiwi_dlsym(g_kiwi_lib, "kiwi_space");
+  g_kiwi_api.kiwi_glue = (fn_kiwi_glue)kiwi_dlsym(g_kiwi_lib, "kiwi_glue");
+  g_kiwi_api.kiwi_free_string =
+      (fn_kiwi_free_string)kiwi_dlsym(g_kiwi_lib, "kiwi_free_string");
 
   g_kiwi_api_loaded = 1;
   return 0;
@@ -447,6 +460,8 @@ static kiwi_analyze_option_t build_kiwi_analyze_options(
   options.open_ending = 0;
   options.allowed_dialects = KIWI_DIALECT_ALL;
   options.dialect_cost = 3.0f;
+  options.typo_transformer = NULL;
+  options.typo_threshold = 2.5f;
   return options;
 }
 
@@ -924,13 +939,8 @@ static int32_t analyze_token_count_internal(
     return -1;
   }
 
-  kiwi_analyze_option_t options;
-  options.match_options =
-      match_options == 0 ? handle->default_match_options : match_options;
-  options.blocklist = NULL;
-  options.open_ending = 0;
-  options.allowed_dialects = KIWI_DIALECT_ALL;
-  options.dialect_cost = 3.0f;
+  kiwi_analyze_option_t options =
+      build_kiwi_analyze_options(handle, match_options);
 
   kiwi_res_h res = g_kiwi_api.kiwi_analyze(
       handle->kiwi, text, top_n > 0 ? top_n : 1, options, NULL);
@@ -1045,6 +1055,10 @@ FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count_batch_runs(
     int32_t match_options,
     int64_t* out_total_tokens) {
   wrapper_clear_error();
+  if (!handle || !handle->kiwi) {
+    wrapper_set_error("Invalid analyzer handle.");
+    return -1;
+  }
   if (!texts) {
     wrapper_set_error("texts must not be null.");
     return -1;
@@ -1070,13 +1084,8 @@ FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_analyze_token_count_batch_runs(
     g_kiwi_api.kiwi_clear_error();
   }
 
-  kiwi_analyze_option_t options;
-  options.match_options =
-      match_options == 0 ? handle->default_match_options : match_options;
-  options.blocklist = NULL;
-  options.open_ending = 0;
-  options.allowed_dialects = KIWI_DIALECT_ALL;
-  options.dialect_cost = 3.0f;
+  kiwi_analyze_option_t options =
+      build_kiwi_analyze_options(handle, match_options);
 
   int64_t total_tokens = 0;
 
@@ -1196,6 +1205,161 @@ FFI_PLUGIN_EXPORT int32_t flutter_kiwi_ffi_add_user_word(
     return -1;
   }
   return 0;
+}
+
+FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_space(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* text,
+    int32_t reset_whitespace) {
+  wrapper_clear_error();
+  if (!handle || !handle->kiwi) {
+    wrapper_set_error("Invalid analyzer handle.");
+    return NULL;
+  }
+  if (!text) {
+    wrapper_set_error("Text must not be null.");
+    return NULL;
+  }
+  if (!g_kiwi_api.kiwi_space || !g_kiwi_api.kiwi_free_string) {
+    wrapper_set_error(
+        "kiwi_space is not supported by the loaded Kiwi library (requires Kiwi >= 0.24.0).");
+    return NULL;
+  }
+
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
+
+  const char* kiwi_result = g_kiwi_api.kiwi_space(
+      handle->kiwi, text, reset_whitespace != 0 ? 1 : 0);
+  if (!kiwi_result) {
+    wrapper_set_error_from_kiwi("Kiwi space failed.");
+    return NULL;
+  }
+
+  size_t length = strlen(kiwi_result);
+  char* copy = (char*)malloc(length + 1);
+  if (!copy) {
+    g_kiwi_api.kiwi_free_string(kiwi_result);
+    wrapper_set_error("Failed to allocate output buffer.");
+    return NULL;
+  }
+  memcpy(copy, kiwi_result, length + 1);
+  g_kiwi_api.kiwi_free_string(kiwi_result);
+  return copy;
+}
+
+FFI_PLUGIN_EXPORT char* flutter_kiwi_ffi_glue_json(
+    flutter_kiwi_ffi_handle_t* handle,
+    const char* const* chunks,
+    int32_t chunk_count,
+    const uint8_t* insert_new_lines,
+    int32_t has_insert_new_lines) {
+  wrapper_clear_error();
+  if (!handle || !handle->kiwi) {
+    wrapper_set_error("Invalid analyzer handle.");
+    return NULL;
+  }
+  if (chunk_count < 0) {
+    wrapper_set_error("chunk_count must be >= 0.");
+    return NULL;
+  }
+  if (chunk_count > 0 && !chunks) {
+    wrapper_set_error("chunks must not be null.");
+    return NULL;
+  }
+  if (has_insert_new_lines != 0 && chunk_count > 1 && !insert_new_lines) {
+    wrapper_set_error("insert_new_lines must not be null.");
+    return NULL;
+  }
+  if (!g_kiwi_api.kiwi_glue || !g_kiwi_api.kiwi_free_string) {
+    wrapper_set_error(
+        "kiwi_glue is not supported by the loaded Kiwi library (requires Kiwi >= 0.24.0).");
+    return NULL;
+  }
+
+  if (chunk_count == 0) {
+    string_builder_t empty_builder;
+    if (sb_init(&empty_builder, 64) != 0) {
+      wrapper_set_error("Failed to allocate output buffer.");
+      return NULL;
+    }
+    if (sb_append(&empty_builder, "{\"text\":\"\",\"spaceInsertions\":[]}") != 0) {
+      sb_destroy(&empty_builder);
+      wrapper_set_error("Failed to build glue JSON.");
+      return NULL;
+    }
+    return empty_builder.data;
+  }
+
+  for (int32_t i = 0; i < chunk_count; ++i) {
+    if (!chunks[i]) {
+      char message[128];
+      snprintf(message, sizeof(message), "chunks[%d] must not be null.", i);
+      wrapper_set_error(message);
+      return NULL;
+    }
+  }
+
+  if (g_kiwi_api.kiwi_clear_error) {
+    g_kiwi_api.kiwi_clear_error();
+  }
+
+  int32_t gap_count = chunk_count > 1 ? chunk_count - 1 : 0;
+  char* space_insertions = NULL;
+  if (gap_count > 0) {
+    space_insertions = (char*)calloc((size_t)gap_count, sizeof(char));
+    if (!space_insertions) {
+      wrapper_set_error("Failed to allocate space_insertions buffer.");
+      return NULL;
+    }
+  }
+
+  const char* new_lines_ptr =
+      (has_insert_new_lines != 0 && gap_count > 0)
+          ? (const char*)insert_new_lines
+          : NULL;
+
+  const char* kiwi_result = g_kiwi_api.kiwi_glue(
+      handle->kiwi,
+      (const char**)chunks,
+      (int)chunk_count,
+      new_lines_ptr,
+      space_insertions);
+  if (!kiwi_result) {
+    free(space_insertions);
+    wrapper_set_error_from_kiwi("Kiwi glue failed.");
+    return NULL;
+  }
+
+  string_builder_t builder;
+  if (sb_init(&builder, strlen(kiwi_result) + 64) != 0) {
+    g_kiwi_api.kiwi_free_string(kiwi_result);
+    free(space_insertions);
+    wrapper_set_error("Failed to allocate output buffer.");
+    return NULL;
+  }
+
+  int failed = 0;
+  failed |= sb_append(&builder, "{\"text\":\"");
+  failed |= sb_append_json_escaped(&builder, kiwi_result);
+  failed |= sb_append(&builder, "\",\"spaceInsertions\":[");
+  for (int32_t i = 0; !failed && i < gap_count; ++i) {
+    if (i > 0) failed |= sb_append(&builder, ",");
+    failed |= sb_append(&builder, space_insertions[i] != 0 ? "true" : "false");
+  }
+  failed |= sb_append(&builder, "]}");
+
+  g_kiwi_api.kiwi_free_string(kiwi_result);
+  free(space_insertions);
+
+  if (failed) {
+    sb_destroy(&builder);
+    wrapper_set_error("Failed to build glue JSON.");
+    return NULL;
+  }
+
+  return builder.data;
 }
 
 FFI_PLUGIN_EXPORT void flutter_kiwi_ffi_free_string(char* value) { free(value); }

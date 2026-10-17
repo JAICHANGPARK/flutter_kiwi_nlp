@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIWI_SRC="${ROOT_DIR}/.tmp/kiwi-src-android"
+KIWI_REPO_URL="${KIWI_REPO_URL:-https://github.com/bab2min/Kiwi}"
+KIWI_REF="${KIWI_REF:-v0.24.0}"
 BUILD_ROOT="${ROOT_DIR}/.tmp/kiwi-android-build"
 ABIS="arm64-v8a,x86_64"
 ANDROID_PLATFORM=21
@@ -15,6 +17,8 @@ Usage: tool/build_android_libkiwi.sh [options]
 
 Options:
   --kiwi-src <path>          Existing Kiwi source root (default: ./.tmp/kiwi-src-android)
+  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.24.0)
+  --kiwi-repo <url>          Kiwi git repository URL
   --abis <csv>               ABI list (default: arm64-v8a,x86_64)
   --android-platform <num>   Android API level (default: 21)
   --jobs <n>                 Parallel build jobs (default: 8)
@@ -27,6 +31,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --kiwi-src)
       KIWI_SRC="${2:-}"
+      shift 2
+      ;;
+    --kiwi-ref)
+      KIWI_REF="${2:-}"
+      shift 2
+      ;;
+    --kiwi-repo)
+      KIWI_REPO_URL="${2:-}"
       shift 2
       ;;
     --abis)
@@ -103,11 +115,11 @@ if [[ ! -f "$TOOLCHAIN_FILE" ]]; then
 fi
 
 if [[ ! -d "$KIWI_SRC/.git" ]]; then
-  echo "[android] Cloning Kiwi source to: $KIWI_SRC"
+  echo "[android] Cloning Kiwi source (${KIWI_REF}) to: $KIWI_SRC"
   rm -rf "$KIWI_SRC"
   GIT_LFS_SKIP_SMUDGE=1 \
   git -c filter.lfs.required=false -c filter.lfs.smudge= -c filter.lfs.process= \
-    clone --depth 1 --recurse-submodules https://github.com/bab2min/Kiwi "$KIWI_SRC"
+    clone --depth 1 --branch "${KIWI_REF}" --recurse-submodules "${KIWI_REPO_URL}" "$KIWI_SRC"
 fi
 
 IFS=',' read -r -a ABI_LIST <<<"$ABIS"
@@ -146,6 +158,7 @@ for ABI in "${ABI_LIST[@]}"; do
     -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
     -DANDROID_ABI="$ABI" \
     -DANDROID_PLATFORM="android-${ANDROID_PLATFORM}" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384" \
     -DKIWI_BUILD_DYNAMIC=ON \
     -DKIWI_BUILD_CLI=OFF \
     -DKIWI_BUILD_EVALUATOR=OFF \

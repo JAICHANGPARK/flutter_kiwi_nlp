@@ -100,3 +100,37 @@ class KiwiAnalyzeResult {
     );
   }
 }
+
+/// The result returned by `KiwiAnalyzer.glue`.
+class KiwiGlueResult {
+  /// The joined text with context-aware spacing applied.
+  final String text;
+
+  /// Whether a space was inserted between each adjacent pair of chunks.
+  ///
+  /// For `N` chunks, this list has length `max(0, N - 1)`.
+  final List<bool> spaceInsertions;
+
+  /// Creates a [KiwiGlueResult].
+  const KiwiGlueResult({required this.text, required this.spaceInsertions});
+
+  /// Creates a glue result from a JSON-compatible map.
+  factory KiwiGlueResult.fromJson(Map<String, dynamic> json) {
+    final List<dynamic> rawSpaceInsertions =
+        json['spaceInsertions'] as List<dynamic>? ?? const <dynamic>[];
+    return KiwiGlueResult(
+      text: json['text'] as String? ?? '',
+      spaceInsertions: rawSpaceInsertions
+          .map((dynamic item) {
+            if (item is bool) {
+              return item;
+            }
+            if (item is num) {
+              return item != 0;
+            }
+            return false;
+          })
+          .toList(growable: false),
+    );
+  }
+}

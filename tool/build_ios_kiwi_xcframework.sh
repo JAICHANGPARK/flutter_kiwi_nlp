@@ -8,7 +8,7 @@ if [[ -d "${ROOT_DIR}/.tmp/kiwi-src-android/.git" ]]; then
 fi
 KIWI_SRC="${DEFAULT_KIWI_SRC}"
 KIWI_REPO_URL="${KIWI_REPO_URL:-https://github.com/bab2min/Kiwi}"
-KIWI_REF="${KIWI_REF:-v0.23.2}"
+KIWI_REF="${KIWI_REF:-v0.24.0}"
 BUILD_ROOT="${ROOT_DIR}/.tmp/kiwi-ios-build"
 OUT_XCFRAMEWORK="${ROOT_DIR}/ios/Frameworks/Kiwi.xcframework"
 JOBS="${JOBS:-8}"
@@ -31,7 +31,7 @@ Usage: tool/build_ios_kiwi_xcframework.sh [options]
 
 Options:
   --kiwi-src <path>          Existing Kiwi source root (default: ./.tmp/kiwi-src-ios, reuses ./.tmp/kiwi-src-android when available)
-  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.23.2)
+  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.24.0)
   --kiwi-repo <url>          Kiwi git repository URL
   --jobs <n>                 Parallel build jobs (default: 8)
   --rebuild                  Rebuild even if ios/Frameworks/Kiwi.xcframework exists
@@ -44,7 +44,7 @@ Environment:
       Same as --rebuild.
   FLUTTER_KIWI_IOS_KIWI_SRC=/path/to/Kiwi
       Use local Kiwi source.
-  FLUTTER_KIWI_IOS_KIWI_REF=v0.23.2
+  FLUTTER_KIWI_IOS_KIWI_REF=v0.24.0
       Override clone ref.
 EOF
 }

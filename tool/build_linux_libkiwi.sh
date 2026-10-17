@@ -8,7 +8,7 @@ if [[ -d "${ROOT_DIR}/.tmp/kiwi-src-android/.git" ]]; then
 fi
 KIWI_SRC="${DEFAULT_KIWI_SRC}"
 KIWI_REPO_URL="${KIWI_REPO_URL:-https://github.com/bab2min/Kiwi}"
-KIWI_REF="${KIWI_REF:-v0.23.2}"
+KIWI_REF="${KIWI_REF:-v0.24.0}"
 BUILD_ROOT="${ROOT_DIR}/.tmp/kiwi-linux-build"
 OUT_SO="${ROOT_DIR}/linux/prebuilt/libkiwi.so"
 ARCH=""
@@ -34,7 +34,7 @@ Options:
   --kiwi-src <path>          Existing Kiwi source root
                              (default: ./.tmp/kiwi-src-linux,
                               reuses ./.tmp/kiwi-src-android when available)
-  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.23.2)
+  --kiwi-ref <tag|branch>    Kiwi git ref to clone (default: v0.24.0)
   --kiwi-repo <url>          Kiwi git repository URL
   --arch <name>              Target arch (default: host arch)
   --jobs <n>                 Parallel build jobs (default: 8)
@@ -48,7 +48,7 @@ Environment:
       Same as --rebuild.
   FLUTTER_KIWI_LINUX_KIWI_SRC=/path/to/Kiwi
       Use local Kiwi source.
-  FLUTTER_KIWI_LINUX_KIWI_REF=v0.23.2
+  FLUTTER_KIWI_LINUX_KIWI_REF=v0.24.0
       Override clone ref.
   FLUTTER_KIWI_LINUX_ARCH=x86_64
       Override target arch.
@@ -130,9 +130,6 @@ resolve_arch() {
     aarch64|arm64)
       echo "arm64"
       ;;
-    ppc64le)
-      echo "ppc64le"
-      ;;
     *)
       echo "${machine}"
       ;;
@@ -166,9 +163,6 @@ map_release_arch() {
       ;;
     arm64|aarch64)
       echo "aarch64"
-      ;;
-    ppc64le)
-      echo "ppc64le"
       ;;
     *)
       return 1

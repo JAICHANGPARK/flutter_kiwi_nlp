@@ -6,7 +6,7 @@ Native-first Flutter plugin for Korean morphological analysis powered by Kiwi.
 
 - [Package Name](#package-name)
 - [Technical Report](#technical-report)
-- [AI Integration Guide](#ai-integration-guide)
+- [AI Integration & Skills Guide](#ai-integration--skills-guide)
 - [Supported Platforms](#supported-platforms)
 - [Unsupported Platforms](#unsupported-platforms)
 - [Features](#features)
@@ -38,26 +38,66 @@ Use `flutter_kiwi_nlp` for dependency and import statements.
 - arXiv-style LaTeX source:
   [`doc/technical_report_arxiv.tex`](doc/technical_report_arxiv.tex)
 
-## AI Integration Guide
+## AI Integration & Skills Guide
 
-If you use an AI coding assistant for this plugin, start here:
+This repository is pre-configured so **Claude Code**, **OpenAI Codex**, and **Google Antigravity** automatically discover and load the project skills as soon as you open this project folder.
 
-- LLM index: [`llms.txt`](llms.txt)
-- Repository skill: [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
-- Skill API reference:
-  [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
-- Skill runtime/build reference:
-  [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
-- Skill verify script:
-  [`skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`](skills/flutter-kiwi-nlp/scripts/verify_plugin.sh)
+### 1. Built-in Agent Discovery Paths (In-Repo)
 
-For Codex, invoke the skill explicitly in your prompt:
+| AI Assistant | Auto-Discovery Paths in Project | How It Works |
+| --- | --- | --- |
+| **Claude Code** | [`.claude/skills/flutter-kiwi-nlp`](.claude/skills/flutter-kiwi-nlp) and [`CLAUDE.md`](CLAUDE.md) | Automatically activated by task intent or invoked explicitly via `/flutter-kiwi-nlp` |
+| **OpenAI Codex** | [`.agents/skills/flutter-kiwi-nlp`](.agents/skills/flutter-kiwi-nlp), [`skills/flutter-kiwi-nlp/agents/openai.yaml`](skills/flutter-kiwi-nlp/agents/openai.yaml), and [`AGENTS.md`](AGENTS.md) | Invoked via `$flutter-kiwi-nlp` or matched automatically from the prompt |
+| **Google Antigravity** | [`.agents/skills.json`](.agents/skills.json), [`.agents/skills/flutter-kiwi-nlp`](.agents/skills/flutter-kiwi-nlp), [`.gemini/skills/flutter-kiwi-nlp`](.gemini/skills/flutter-kiwi-nlp), and [`AGENTS.md`](AGENTS.md) | Automatically mounts `skills/` on workspace startup for Korean NLP & plugin tasks |
 
-```text
-Use $flutter-kiwi-nlp to implement and validate this change.
+### 2. Project Skill Structure (`skills/flutter-kiwi-nlp/`)
+
+- **Main skill definition**: [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
+  - Workflows for both Flutter app integration (`analyze`, `analyzeBatch`, `space`, `glue`, `addUserWord`) and plugin maintenance
+- **Copy-paste usage recipes**: [`skills/flutter-kiwi-nlp/references/usage-recipes.md`](skills/flutter-kiwi-nlp/references/usage-recipes.md)
+  - Ready-to-use patterns for `ChangeNotifier` lifecycle management, morphological analysis, spacing correction (`space`), chunk joining (`glue`), runtime user words (`addUserWord`), and custom model paths
+- **API & parity reference**: [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
+- **Runtime & build reference**: [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
+- **Verification script**: [`skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`](skills/flutter-kiwi-nlp/scripts/verify_plugin.sh)
+- **LLM index**: [`llms.txt`](llms.txt)
+
+### 3. Using the Skill in Your Own Flutter App Project
+
+To make Claude Code, Codex, and Antigravity discover the `flutter-kiwi-nlp` skill inside another Flutter app repository, copy or symlink `skills/flutter-kiwi-nlp`:
+
+```bash
+# Antigravity & OpenAI Codex (.agents/skills)
+mkdir -p .agents/skills
+cp -R /path/to/flutter_kiwi_nlp/skills/flutter-kiwi-nlp .agents/skills/
+
+# Claude Code (.claude/skills)
+mkdir -p .claude/skills
+cp -R /path/to/flutter_kiwi_nlp/skills/flutter-kiwi-nlp .claude/skills/
 ```
 
-Then run:
+### 4. Example Prompts for AI Assistants
+
+**① App Integration (Morphological Analysis & POS Extraction)**
+```text
+Use $flutter-kiwi-nlp to create a KoreanNlpService that initializes KiwiAnalyzer once, extracts nouns (NNG, NNP) from user input via analyze(), and disposes the analyzer cleanly.
+```
+
+**② Spacing Correction (`space`) & Context-Aware Chunk Joining (`glue`)**
+```text
+Using $flutter-kiwi-nlp (references/usage-recipes.md), join a list of line-broken Korean OCR text chunks with glue() and normalize spacing with space(resetWhitespace: true).
+```
+
+**③ Runtime User Dictionary (`addUserWord`) & Batch Analysis (`analyzeBatch`)**
+```text
+Use $flutter-kiwi-nlp to register custom proper nouns via addUserWord() and analyze a list of sentences with analyzeBatch().
+```
+
+**④ Plugin Maintenance & Verification**
+```text
+Use $flutter-kiwi-nlp to implement and validate this change across native and web.
+```
+
+Run the verification script after plugin changes:
 
 ```bash
 ./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh
@@ -83,8 +123,8 @@ Then run:
 ## Features
 
 - Unified `KiwiAnalyzer` API on native (FFI) and web (WASM).
-- Typed result models: `KiwiAnalyzeResult`, `KiwiCandidate`, `KiwiToken`.
-- Runtime user dictionary update via `addUserWord`.
+- Typed result models: `KiwiAnalyzeResult`, `KiwiCandidate`, `KiwiToken`, `KiwiGlueResult`.
+- Runtime user dictionary update via `addUserWord` and spacing correction/chunk joining via `space` and `glue`.
 - Built-in default model assets (`assets/kiwi-models/cong/base`).
 - Native fallback default model download/cache.
 - Web fallback from same-origin asset URL loading to archive download.
@@ -108,8 +148,11 @@ Then run:
 | `KiwiAnalyzer.create` | `Future<KiwiAnalyzer> create({String? modelPath, String? assetModelPath, int numThreads = -1, int buildOptions = KiwiBuildOption.defaultOption, int matchOptions = KiwiMatchOption.allWithNormalizing})` | Creates an analyzer instance. You can control model path, build options, and match options. |
 | `KiwiAnalyzer.nativeVersion` | `String get nativeVersion` | Returns a backend version string (for example native version or web/wasm version). |
 | `KiwiAnalyzer.analyze` | `Future<KiwiAnalyzeResult> analyze(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | Runs morphological analysis and returns candidate results. |
+| `KiwiAnalyzer.analyzeBatch` | `Future<List<KiwiAnalyzeResult>> analyzeBatch(List<String> texts, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | Runs morphological analysis for multiple texts in input order. |
 | `KiwiAnalyzer.analyzeTokenCount` | `Future<int> analyzeTokenCount(String text, {KiwiAnalyzeOptions options = const KiwiAnalyzeOptions()})` | Runs analysis and returns only the first-candidate token count (useful for tokenizer-focused benchmarks). |
 | `KiwiAnalyzer.addUserWord` | `Future<void> addUserWord(String word, {String tag = 'NNP', double score = 0.0})` | Adds a runtime user dictionary entry. |
+| `KiwiAnalyzer.space` | `Future<String> space(String text, {bool resetWhitespace = false})` | Corrects spacing in input text. |
+| `KiwiAnalyzer.glue` | `Future<KiwiGlueResult> glue(List<String> chunks, {List<bool>? insertNewLines})` | Joins multiple text chunks with context-aware spacing. |
 | `KiwiAnalyzer.close` | `Future<void> close()` | Closes the analyzer and releases resources. |
 
 On unsupported platforms, creating or calling `KiwiAnalyzer` throws
@@ -131,15 +174,19 @@ On unsupported platforms, creating or calling `KiwiAnalyzer` throws
 | `KiwiBuildOption.modelTypeCong` | `int` | Model type constant. |
 | `KiwiBuildOption.modelTypeCongGlobal` | `int` | Model type constant. |
 | `KiwiBuildOption.defaultOption` | `int` | Recommended default build option combination. |
-| `KiwiMatchOption.url`/`email`/`hashtag`/`mention`/`serial` | `int` bit flag | URL/email/hashtag/mention/serial detection options. |
+| `KiwiMatchOption.none` | `int` | Disables optional token matching flags (`0`). |
+| `KiwiMatchOption.url`/`email`/`hashtag`/`mention`/`serial`/`emoji` | `int` bit flag | URL/email/hashtag/mention/serial/emoji detection options. |
+| `KiwiMatchOption.oovRuleOnly`/`oovChrModel`/`oovChrFreqModel`/`oovChrFreqBranchModel`/`oovMask` | `int` bit flag | Out-of-vocabulary handling mode flags and mask. |
 | `KiwiMatchOption.normalizeCoda` | `int` bit flag | Coda normalization option. |
 | `KiwiMatchOption.joinNounPrefix`/`joinNounSuffix` | `int` bit flag | Noun prefix/suffix joining options. |
-| `KiwiMatchOption.joinVerbSuffix`/`joinAdjSuffix`/`joinAdvSuffix` | `int` bit flag | Verb/adjective/adverb suffix joining options. |
+| `KiwiMatchOption.joinVerbSuffix`/`joinAdjSuffix`/`joinAdvSuffix`/`joinVSuffix`/`joinAffix` | `int` bit flag | Verb/adjective/adverb/affix joining options. |
 | `KiwiMatchOption.splitComplex` | `int` bit flag | Complex form split option. |
 | `KiwiMatchOption.zCoda` | `int` bit flag | Coda-related matching option. |
 | `KiwiMatchOption.compatibleJamo` | `int` bit flag | Compatibility jamo option. |
 | `KiwiMatchOption.splitSaisiot`/`mergeSaisiot` | `int` bit flag | Saisiot split/merge options. |
-| `KiwiMatchOption.all` | `int` | Baseline match option bundle. |
+| `KiwiMatchOption.joinParticleYo` | `int` bit flag | Joins sentence-ending particle `-요` (`JX`). |
+| `KiwiMatchOption.useOldSplitter` | `int` bit flag | Uses legacy sentence splitter behavior. |
+| `KiwiMatchOption.all` | `int` | Baseline match option bundle (includes `emoji`). |
 | `KiwiMatchOption.allWithNormalizing` | `int` | `all + normalizeCoda` bundle. |
 
 ### Result/Exception Model API
@@ -154,6 +201,8 @@ On unsupported platforms, creating or calling `KiwiAnalyzer` throws
 | `KiwiToken.start`/`length` | `int` | Start offset and length in input text. |
 | `KiwiToken.wordPosition`/`sentPosition` | `int` | Word/sentence index positions. |
 | `KiwiToken.score`/`typoCost` | `double` | Token score and typo cost. |
+| `KiwiGlueResult.text` | `String` | Joined text returned by `glue`. |
+| `KiwiGlueResult.spaceInsertions` | `List<bool>` | Whether a space was inserted between each adjacent chunk pair. |
 | `KiwiException` | `Exception` | Plugin error type. Check the `message` field for details. |
 
 ## Size Impact (Approx.) and `kiwipiepy` Comparison
@@ -562,7 +611,7 @@ Order used by `KiwiAnalyzer.create()`:
 
 Default archive URL:
 
-- `https://github.com/bab2min/Kiwi/releases/download/v0.23.2/kiwi_model_v0.23.2_base.tgz`
+- `https://github.com/bab2min/Kiwi/releases/download/v0.24.0/kiwi_model_v0.24.0_base.tgz`
 
 ### Web
 

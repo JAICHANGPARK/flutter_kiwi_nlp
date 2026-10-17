@@ -84,6 +84,20 @@ abstract interface class KiwiNativeBindings {
     double score,
   );
 
+  Pointer<Char> flutter_kiwi_ffi_space(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> text,
+    int resetWhitespace,
+  );
+
+  Pointer<Char> flutter_kiwi_ffi_glue_json(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> chunks,
+    int chunkCount,
+    Pointer<Uint8> insertNewLines,
+    int hasInsertNewLines,
+  );
+
   void flutter_kiwi_ffi_free_string(Pointer<Char> value);
 
   Pointer<Char> flutter_kiwi_ffi_last_error();
@@ -215,6 +229,32 @@ class GeneratedKiwiNativeBindings implements KiwiNativeBindings {
     double score,
   ) {
     return _bindings.flutter_kiwi_ffi_add_user_word(handle, word, tag, score);
+  }
+
+  @override
+  Pointer<Char> flutter_kiwi_ffi_space(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Char> text,
+    int resetWhitespace,
+  ) {
+    return _bindings.flutter_kiwi_ffi_space(handle, text, resetWhitespace);
+  }
+
+  @override
+  Pointer<Char> flutter_kiwi_ffi_glue_json(
+    Pointer<flutter_kiwi_ffi_handle_t> handle,
+    Pointer<Pointer<Char>> chunks,
+    int chunkCount,
+    Pointer<Uint8> insertNewLines,
+    int hasInsertNewLines,
+  ) {
+    return _bindings.flutter_kiwi_ffi_glue_json(
+      handle,
+      chunks,
+      chunkCount,
+      insertNewLines,
+      hasInsertNewLines,
+    );
   }
 
   @override
@@ -393,15 +433,14 @@ const String _defaultModelArchiveUrl = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_MODEL_ARCHIVE_URL',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_URL',
-    defaultValue:
-        'https://github.com/bab2min/Kiwi/releases/download/v0.23.2/kiwi_model_v0.23.2_base.tgz',
+    defaultValue: 'https://github.com/bab2min/Kiwi/releases/download/v0.24.0/kiwi_model_v0.24.0_base.tgz',
   ),
 );
 const String _defaultModelCacheKey = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_MODEL_CACHE_KEY',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_MODEL_CACHE_KEY',
-    defaultValue: 'v0.23.2_base',
+    defaultValue: 'v0.24.0_base',
   ),
 );
 const String _defaultModelArchiveSha256 = String.fromEnvironment(
@@ -409,7 +448,7 @@ const String _defaultModelArchiveSha256 = String.fromEnvironment(
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_MODEL_ARCHIVE_SHA256',
     defaultValue:
-        '15f35787ab07281688a321f5d6bc24a117008190d9fcccb11dca188e81eba814',
+        '33188ba932bba4717bad5244bbec0ef8b1c9cbb47e26e68394a7976d8d779083',
   ),
 );
 const List<String> _autoAssetModelPaths = <String>[
@@ -784,6 +823,113 @@ class KiwiAnalyzer {
     } finally {
       malloc.free(wordPtr);
       malloc.free(tagPtr);
+    }
+  }
+
+  /// Corrects spacing in [text] using the Kiwi morphological analyzer.
+  ///
+  /// If [resetWhitespace] is `true`, existing whitespace is compacted before
+  /// re-spacing.
+  ///
+  /// Throws a [KiwiException] if spacing fails or if this analyzer is closed.
+  Future<String> space(String text, {bool resetWhitespace = false}) async {
+    _assertOpen();
+    final Pointer<Utf8> textPtr = text.toNativeUtf8(allocator: malloc);
+    try {
+      final Pointer<Char> raw = _bindings.flutter_kiwi_ffi_space(
+        _handle,
+        textPtr.cast(),
+        resetWhitespace ? 1 : 0,
+      );
+      if (raw == nullptr) {
+        throw KiwiException(_readLastError(_bindings));
+      }
+      try {
+        return raw.cast<Utf8>().toDartString();
+      } finally {
+        _bindings.flutter_kiwi_ffi_free_string(raw);
+      }
+    } finally {
+      malloc.free(textPtr);
+    }
+  }
+
+  /// Joins [chunks] with context-aware spacing.
+  ///
+  /// If [insertNewLines] is provided, its length must be
+  /// `max(0, chunks.length - 1)`. Each element specifies whether the
+  /// corresponding boundary should insert a newline instead of a space when
+  /// spacing is required.
+  ///
+  /// Throws a [KiwiException] if [insertNewLines] has an invalid length, if
+  /// native glue execution fails, or if this analyzer is closed.
+  Future<KiwiGlueResult> glue(
+    List<String> chunks, {
+    List<bool>? insertNewLines,
+  }) async {
+    _assertOpen();
+    final int expectedPairs = chunks.length > 1 ? chunks.length - 1 : 0;
+    if (insertNewLines != null && insertNewLines.length != expectedPairs) {
+      throw const KiwiException(
+        'insertNewLines length must be max(0, chunks.length - 1).',
+      );
+    }
+    if (chunks.isEmpty) {
+      return const KiwiGlueResult(text: '', spaceInsertions: <bool>[]);
+    }
+
+    final int chunkCount = chunks.length;
+    final Pointer<Pointer<Char>> chunkPointers = malloc<Pointer<Char>>(
+      chunkCount,
+    );
+    final List<Pointer<Utf8>> allocated = <Pointer<Utf8>>[];
+    Pointer<Uint8> insertNewLinesPtr = nullptr;
+
+    try {
+      for (int index = 0; index < chunkCount; index += 1) {
+        final Pointer<Utf8> chunkPtr = chunks[index].toNativeUtf8(
+          allocator: malloc,
+        );
+        allocated.add(chunkPtr);
+        chunkPointers[index] = chunkPtr.cast<Char>();
+      }
+
+      if (insertNewLines != null && expectedPairs > 0) {
+        insertNewLinesPtr = malloc<Uint8>(expectedPairs);
+        for (int index = 0; index < expectedPairs; index += 1) {
+          insertNewLinesPtr[index] = insertNewLines[index] ? 1 : 0;
+        }
+      }
+
+      final Pointer<Char> raw = _bindings.flutter_kiwi_ffi_glue_json(
+        _handle,
+        chunkPointers,
+        chunkCount,
+        insertNewLinesPtr,
+        insertNewLines != null ? 1 : 0,
+      );
+      if (raw == nullptr) {
+        throw KiwiException(_readLastError(_bindings));
+      }
+
+      try {
+        final String jsonText = raw.cast<Utf8>().toDartString();
+        final dynamic decoded = jsonDecode(jsonText);
+        if (decoded is! Map<String, dynamic>) {
+          throw const KiwiException('Unexpected glue payload.');
+        }
+        return KiwiGlueResult.fromJson(decoded);
+      } finally {
+        _bindings.flutter_kiwi_ffi_free_string(raw);
+      }
+    } finally {
+      for (final Pointer<Utf8> pointer in allocated) {
+        malloc.free(pointer);
+      }
+      malloc.free(chunkPointers);
+      if (insertNewLinesPtr != nullptr) {
+        malloc.free(insertNewLinesPtr);
+      }
     }
   }
 

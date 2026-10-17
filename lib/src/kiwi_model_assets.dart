@@ -6,6 +6,7 @@ const List<String> kiwiModelFileNames = <String>[
   'dialect.dict',
   'extract.mdl',
   'multi.dict',
+  'nounchr.mdl',
   'sj.morph',
   'typo.dict',
 ];
@@ -18,6 +19,7 @@ const Map<String, int> kiwiMinModelFileBytes = <String, int>{
   'dialect.dict': 64,
   'extract.mdl': 4 * 1024,
   'multi.dict': 1024 * 1024,
+  'nounchr.mdl': 1024 * 1024,
   'sj.morph': 1024 * 1024,
   'typo.dict': 64,
 };

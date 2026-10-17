@@ -1,3 +1,20 @@
+# flutter_kiwi_nlp — AI Agent Rules & Skills
+
+## Project Skill Quick Reference (Claude Code, Codex, Antigravity)
+
+This repository bundles the **`flutter-kiwi-nlp`** skill inside the project folder so Claude Code, OpenAI Codex, and Google Antigravity can automatically discover and use it:
+
+- **Skill Entrypoint**: [`skills/flutter-kiwi-nlp/SKILL.md`](skills/flutter-kiwi-nlp/SKILL.md)
+  - Auto-discovery mirrors: `.claude/skills/flutter-kiwi-nlp` (Claude Code), `.agents/skills/flutter-kiwi-nlp` & `.agents/skills.json` (Antigravity & Codex), `skills/flutter-kiwi-nlp/agents/openai.yaml` (Codex).
+- **App Integration & Usage Recipes**: [`skills/flutter-kiwi-nlp/references/usage-recipes.md`](skills/flutter-kiwi-nlp/references/usage-recipes.md)
+  - Read this when writing Flutter code that uses `KiwiAnalyzer` (`create`, `analyze`, `analyzeBatch`, `space`, `glue`, `addUserWord`, `KiwiMatchOption`, `KiwiBuildOption`, `close`).
+- **Public API & Parity Contract**: [`skills/flutter-kiwi-nlp/references/api-surface.md`](skills/flutter-kiwi-nlp/references/api-surface.md)
+- **Runtime Model Resolution & Build Hooks**: [`skills/flutter-kiwi-nlp/references/runtime-and-build.md`](skills/flutter-kiwi-nlp/references/runtime-and-build.md)
+- **Verification Script**: `./skills/flutter-kiwi-nlp/scripts/verify_plugin.sh`
+- **LLM Documentation Index**: [`llms.txt`](llms.txt)
+
+---
+
 # AI rules for Flutter
 
 You are an expert in Flutter and Dart development. Your goal is to build

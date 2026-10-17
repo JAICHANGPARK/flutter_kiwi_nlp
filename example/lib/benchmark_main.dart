@@ -349,7 +349,7 @@ class _BenchmarkResult {
       'json_overhead_per_analysis_ms': jsonOverheadPerAnalysisMs,
       'json_overhead_per_token_us': jsonOverheadPerTokenUs,
       'sample_outputs': sampleOutputs
-          .map((final _BenchmarkSampleOutput sample) => sample.toJson())
+          .map((_BenchmarkSampleOutput sample) => sample.toJson())
           .toList(growable: false),
     };
   }
@@ -481,7 +481,7 @@ Future<List<_BenchmarkSentence>> _loadSentences(String corpusAssetPath) async {
 
   return lines
       .map(
-        (final String sentence) => _BenchmarkSentence(
+        (String sentence) => _BenchmarkSentence(
           text: sentence,
           runeLength: sentence.runes.length,
         ),
@@ -507,7 +507,7 @@ Future<_RunStats> _executeRuns({
     (int sum, _BenchmarkSentence sentence) => sum + sentence.runeLength,
   );
   final List<String> sentenceTexts = sentences
-      .map((final _BenchmarkSentence sentence) => sentence.text)
+      .map((_BenchmarkSentence sentence) => sentence.text)
       .toList(growable: false);
 
   final Stopwatch stopwatch = Stopwatch()..start();
@@ -610,7 +610,7 @@ Future<List<_BenchmarkSampleOutput>> _collectSampleOutputs({
     final String top1Text = tokens.isEmpty
         ? '(결과 없음)'
         : tokens
-              .map((final KiwiToken token) => '${token.form}/${token.tag}')
+              .map((KiwiToken token) => '${token.form}/${token.tag}')
               .join(' ');
     outputs.add(
       _BenchmarkSampleOutput(

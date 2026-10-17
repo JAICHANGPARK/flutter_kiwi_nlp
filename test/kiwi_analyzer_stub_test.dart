@@ -57,6 +57,14 @@ void main() {
       analyzer.addUserWord('사용자사전'),
       throwsA(hasUnsupportedMessage()),
     );
+    await expectLater(
+      analyzer.space('띄어쓰기테스트'),
+      throwsA(hasUnsupportedMessage()),
+    );
+    await expectLater(
+      analyzer.glue(<String>['띄어', '쓰기']),
+      throwsA(hasUnsupportedMessage()),
+    );
     await expectLater(analyzer.close(), throwsA(hasUnsupportedMessage()));
   });
 }

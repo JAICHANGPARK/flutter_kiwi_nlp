@@ -17,8 +17,11 @@ set_target_properties(flutter_kiwi_ffi PROPERTIES
 target_compile_definitions(flutter_kiwi_ffi PUBLIC DART_SHARED_LIB)
 
 if (ANDROID)
-  # Support Android 15 16k page size
-  target_link_options(flutter_kiwi_ffi PRIVATE "-Wl,-z,max-page-size=16384")
+  # Support Android 15+ 16 KB page size
+  target_link_options(flutter_kiwi_ffi PRIVATE
+    "-Wl,-z,max-page-size=16384"
+    "-Wl,-z,common-page-size=16384"
+  )
 endif()
 
 if (UNIX AND NOT APPLE)

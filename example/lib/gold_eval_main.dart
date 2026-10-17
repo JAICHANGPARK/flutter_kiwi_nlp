@@ -261,16 +261,16 @@ Future<_GoldEvalResult> _runGoldEval(_GoldEvalConfig config) async {
       final List<_GoldToken> predicted = _bestCandidateTokens(result);
 
       final List<String> goldForms = entry.tokens
-          .map((final _GoldToken token) => token.form)
+          .map((_GoldToken token) => token.form)
           .toList(growable: false);
       final List<String> predictedForms = predicted
-          .map((final _GoldToken token) => token.form)
+          .map((_GoldToken token) => token.form)
           .toList(growable: false);
       final List<String> goldPairs = entry.tokens
-          .map((final _GoldToken token) => token.pairKey())
+          .map((_GoldToken token) => token.pairKey())
           .toList(growable: false);
       final List<String> predictedPairs = predicted
-          .map((final _GoldToken token) => token.pairKey())
+          .map((_GoldToken token) => token.pairKey())
           .toList(growable: false);
 
       final int tokenDenominator = _maxInt(
@@ -394,9 +394,7 @@ List<_GoldToken> _bestCandidateTokens(KiwiAnalyzeResult result) {
 
   final List<KiwiToken> tokens = result.candidates.first.tokens;
   return tokens
-      .map(
-        (final KiwiToken token) => _GoldToken(form: token.form, tag: token.tag),
-      )
+      .map((KiwiToken token) => _GoldToken(form: token.form, tag: token.tag))
       .toList(growable: false);
 }
 
@@ -430,7 +428,7 @@ int _levenshteinDistance(List<String> left, List<String> right) {
 
   List<int> previous = List<int>.generate(
     right.length + 1,
-    (final int index) => index,
+    (int index) => index,
   );
 
   for (int i = 1; i <= left.length; i += 1) {

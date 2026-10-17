@@ -1,6 +1,6 @@
 name: flutter_kiwi_nlp
 description: "Flutter plugin for Korean morphological analysis with Kiwi via native FFI and web WASM."
-version: 2026.7.24
+version: 2026.10.17
 homepage: https://github.com/JAICHANGPARK/flutter_kiwi_nlp
 repository: https://github.com/JAICHANGPARK/flutter_kiwi_nlp
 issue_tracker: https://github.com/JAICHANGPARK/flutter_kiwi_nlp/issues
@@ -23,21 +23,21 @@ screenshots:
     path: doc/web.png
 
 environment:
-  sdk: ^3.11.0
-  flutter: '>=3.3.0'
+  sdk: ^3.13.0
+  flutter: '>=3.47.0'
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
-  archive: ^4.0.9
+  archive: ^4.5.2
   crypto: ^3.0.7
   ffi: ^2.2.0
   http: ^1.6.0
 
 dev_dependencies:
-  ffigen: ^20.1.1
+  ffigen: ^23.0.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

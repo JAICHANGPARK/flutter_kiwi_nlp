@@ -17,7 +17,7 @@ const String _defaultModuleUrl = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_WEB_MODULE_URL',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_WEB_MODULE_URL',
-    defaultValue: 'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.22.1/dist/index.js',
+    defaultValue: 'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.24.0/dist/index.js',
   ),
 );
 const String _defaultWasmUrl = String.fromEnvironment(
@@ -25,7 +25,7 @@ const String _defaultWasmUrl = String.fromEnvironment(
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_WEB_WASM_URL',
     defaultValue:
-        'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.22.1/dist/kiwi-wasm.wasm',
+        'https://cdn.jsdelivr.net/npm/kiwi-nlp@0.24.0/dist/kiwi-wasm.wasm',
   ),
 );
 const String _defaultModelBaseUrl = String.fromEnvironment(
@@ -46,14 +46,14 @@ const String _defaultModelArchiveVersion = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_VERSION',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_VERSION',
-    defaultValue: 'v0.23.2',
+    defaultValue: 'v0.24.0',
   ),
 );
 const String _defaultModelArchiveName = String.fromEnvironment(
   'FLUTTER_KIWI_NLP_WEB_MODEL_ARCHIVE_NAME',
   defaultValue: String.fromEnvironment(
     'FLUTTER_KIWI_FFI_WEB_MODEL_ARCHIVE_NAME',
-    defaultValue: 'kiwi_model_v0.23.2_base.tgz',
+    defaultValue: 'kiwi_model_v0.24.0_base.tgz',
   ),
 );
 const String _defaultModelArchiveUrl = String.fromEnvironment(
@@ -431,6 +431,74 @@ class KiwiAnalyzer {
     _kiwiId = rebuilt.kiwiId;
   }
 
+  /// Corrects spacing in [text] using the Kiwi morphological analyzer.
+  ///
+  /// If [resetWhitespace] is `true`, existing whitespace is compacted before
+  /// re-spacing.
+  ///
+  /// Throws a [KiwiException] if spacing fails or if this analyzer is closed.
+  Future<String> space(String text, {bool resetWhitespace = false}) async {
+    _assertOpen();
+    final JSAny? raw = _kiwi != null
+        ? _kiwi!.callMethodVarArgs<JSAny?>('space'.toJS, <JSAny?>[
+            text.toJS,
+            resetWhitespace.toJS,
+          ])
+        : _callApiCmd('space', <Object?>[text, resetWhitespace]);
+    if (raw == null) {
+      throw const KiwiException('space returned null on web backend.');
+    }
+    final Object? dartified = raw.dartify();
+    if (dartified is! String) {
+      throw const KiwiException('Unexpected space payload from web backend.');
+    }
+    return dartified;
+  }
+
+  /// Joins [chunks] with context-aware spacing.
+  ///
+  /// If [insertNewLines] is provided, its length must be
+  /// `max(0, chunks.length - 1)`. Each element specifies whether the
+  /// corresponding boundary should insert a newline instead of a space when
+  /// spacing is required.
+  ///
+  /// Throws a [KiwiException] if [insertNewLines] has an invalid length, if
+  /// web glue execution fails, or if this analyzer is closed.
+  Future<KiwiGlueResult> glue(
+    List<String> chunks, {
+    List<bool>? insertNewLines,
+  }) async {
+    _assertOpen();
+    final int expectedPairs = chunks.length > 1 ? chunks.length - 1 : 0;
+    if (insertNewLines != null && insertNewLines.length != expectedPairs) {
+      throw const KiwiException(
+        'insertNewLines length must be max(0, chunks.length - 1).',
+      );
+    }
+    if (chunks.isEmpty) {
+      return const KiwiGlueResult(text: '', spaceInsertions: <bool>[]);
+    }
+
+    final JSAny? raw = _kiwi != null
+        ? _kiwi!.callMethodVarArgs<JSAny?>('glue'.toJS, <JSAny?>[
+            chunks.jsify(),
+            if (insertNewLines != null) insertNewLines.jsify(),
+          ])
+        : _callApiCmd('glue', <Object?>[chunks, ?insertNewLines]);
+    if (raw == null) {
+      throw const KiwiException('glue returned null on web backend.');
+    }
+    final Object? dartified = raw.dartify();
+    if (dartified is! Map<dynamic, dynamic>) {
+      throw const KiwiException('Unexpected glue payload from web backend.');
+    }
+    final Map<String, dynamic> map = <String, dynamic>{
+      for (final MapEntry<dynamic, dynamic> entry in dartified.entries)
+        entry.key.toString(): entry.value,
+    };
+    return KiwiGlueResult.fromJson(map);
+  }
+
   /// Releases web-side state for this analyzer.
   ///
   /// After calling this method, subsequent API calls throw a [KiwiException].
@@ -515,37 +583,46 @@ Future<_BuiltKiwi> _buildKiwiViaApi(
   }
 
   final JSObject loadResult = loadResultAny as JSObject;
-  final JSAny? modelPathAny = loadResult['modelPath'];
-  final String modelPath = modelPathAny != null && modelPathAny.isA<JSString>()
-      ? (modelPathAny as JSString).toDart
-      : '';
-  if (modelPath.isEmpty) {
-    throw const KiwiException(
-      'KiwiApi.loadModelFiles did not return modelPath.',
+  try {
+    final JSAny? modelPathAny = loadResult['modelPath'];
+    final String modelPath =
+        modelPathAny != null && modelPathAny.isA<JSString>()
+        ? (modelPathAny as JSString).toDart
+        : '';
+    if (modelPath.isEmpty) {
+      throw const KiwiException(
+        'KiwiApi.loadModelFiles did not return modelPath.',
+      );
+    }
+
+    final Map<String, Object?> apiBuildArgs = Map<String, Object?>.from(
+      buildArgs,
     );
+    apiBuildArgs['modelPath'] = modelPath;
+    apiBuildArgs.remove('modelFiles');
+
+    final Object? userDictsAny = apiBuildArgs['userDicts'];
+    if (userDictsAny is List) {
+      apiBuildArgs['userDicts'] = userDictsAny
+          .map((Object? path) => '$modelPath/${path ?? ''}')
+          .toList(growable: false);
+    }
+
+    final JSAny? kiwiIdAny = api.callMethodVarArgs<JSAny?>('cmd'.toJS, <JSAny?>[
+      <String, Object?>{
+        'method': 'build',
+        'args': <Object?>[apiBuildArgs],
+      }.jsify(),
+    ]);
+    final int kiwiId = _asInt(kiwiIdAny, context: 'KiwiApi.cmd(build)');
+    return _BuiltKiwi(api: api, kiwiId: kiwiId);
+  } finally {
+    try {
+      loadResult.callMethod<JSAny?>('unload'.toJS);
+    } catch (_) {
+      // Best-effort virtual filesystem cleanup.
+    }
   }
-
-  final Map<String, Object?> apiBuildArgs = Map<String, Object?>.from(
-    buildArgs,
-  );
-  apiBuildArgs['modelPath'] = modelPath;
-  apiBuildArgs.remove('modelFiles');
-
-  final Object? userDictsAny = apiBuildArgs['userDicts'];
-  if (userDictsAny is List) {
-    apiBuildArgs['userDicts'] = userDictsAny
-        .map((Object? path) => '$modelPath/${path ?? ''}')
-        .toList(growable: false);
-  }
-
-  final JSAny? kiwiIdAny = api.callMethodVarArgs<JSAny?>('cmd'.toJS, <JSAny?>[
-    <String, Object?>{
-      'method': 'build',
-      'args': <Object?>[apiBuildArgs],
-    }.jsify(),
-  ]);
-  final int kiwiId = _asInt(kiwiIdAny, context: 'KiwiApi.cmd(build)');
-  return _BuiltKiwi(api: api, kiwiId: kiwiId);
 }
 
 JSObject? _extractBuilderApi(JSObject builder) {

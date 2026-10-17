@@ -236,6 +236,60 @@ class _BindingStubs {
     }, exceptionalReturn: -1),
   );
 
+  late final ffi.NativeCallable<
+    ffi.Pointer<ffi.Char> Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Char>,
+      ffi.Int32,
+    )
+  >
+  _space = _trackCallable(
+    ffi.NativeCallable<
+      ffi.Pointer<ffi.Char> Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Char>,
+        ffi.Int32,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Char> text,
+      int resetWhitespace,
+    ) {
+      return 'spaced'.toNativeUtf8().cast<ffi.Char>();
+    }),
+  );
+
+  late final ffi.NativeCallable<
+    ffi.Pointer<ffi.Char> Function(
+      ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+      ffi.Pointer<ffi.Pointer<ffi.Char>>,
+      ffi.Int32,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+    )
+  >
+  _glueJson = _trackCallable(
+    ffi.NativeCallable<
+      ffi.Pointer<ffi.Char> Function(
+        ffi.Pointer<flutter_kiwi_ffi_handle_t>,
+        ffi.Pointer<ffi.Pointer<ffi.Char>>,
+        ffi.Int32,
+        ffi.Pointer<ffi.Uint8>,
+        ffi.Int32,
+      )
+    >.isolateLocal((
+      ffi.Pointer<flutter_kiwi_ffi_handle_t> handle,
+      ffi.Pointer<ffi.Pointer<ffi.Char>> chunks,
+      int chunkCount,
+      ffi.Pointer<ffi.Uint8> insertNewLines,
+      int hasInsertNewLines,
+    ) {
+      return '{"text":"x y","spaceInsertions":[true]}'
+          .toNativeUtf8()
+          .cast<ffi.Char>();
+    }),
+  );
+
   late final ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>
   _freeString = _trackCallable(
     ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>.isolateLocal((
@@ -284,6 +338,8 @@ class _BindingStubs {
       'flutter_kiwi_ffi_analyze_token_count_batch_runs' =>
         _analyzeTokenCountBatchRuns.nativeFunction.cast(),
       'flutter_kiwi_ffi_add_user_word' => _addWord.nativeFunction.cast(),
+      'flutter_kiwi_ffi_space' => _space.nativeFunction.cast(),
+      'flutter_kiwi_ffi_glue_json' => _glueJson.nativeFunction.cast(),
       'flutter_kiwi_ffi_free_string' => _freeString.nativeFunction.cast(),
       'flutter_kiwi_ffi_last_error' => _lastError.nativeFunction.cast(),
       'flutter_kiwi_ffi_version' => _version.nativeFunction.cast(),
@@ -405,6 +461,24 @@ void main() {
     );
     bindings.flutter_kiwi_ffi_free_string(batchJsonPtr);
     expect(stubs.freedPointers, contains(batchJsonPtr.address));
+
+    final ffi.Pointer<ffi.Char> spacedPtr = bindings.flutter_kiwi_ffi_space(
+      handle,
+      text,
+      0,
+    );
+    expect(spacedPtr.cast<Utf8>().toDartString(), 'spaced');
+    bindings.flutter_kiwi_ffi_free_string(spacedPtr);
+    expect(stubs.freedPointers, contains(spacedPtr.address));
+
+    final ffi.Pointer<ffi.Char> glueJsonPtr = bindings
+        .flutter_kiwi_ffi_glue_json(handle, batchTexts, 2, ffi.nullptr, 0);
+    expect(
+      glueJsonPtr.cast<Utf8>().toDartString(),
+      '{"text":"x y","spaceInsertions":[true]}',
+    );
+    bindings.flutter_kiwi_ffi_free_string(glueJsonPtr);
+    expect(stubs.freedPointers, contains(glueJsonPtr.address));
 
     expect(
       bindings.flutter_kiwi_ffi_last_error().cast<Utf8>().toDartString(),
